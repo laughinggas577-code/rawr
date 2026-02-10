@@ -137,7 +137,7 @@ public class PathWalker extends Module {
 
         if (plannedPath.isEmpty() || repathCooldown <= 0) {
             planPath(mc, player);
-            repathCooldown = 10;
+            repathCooldown = 6;
         }
         chooseWaypoint(player);
 
@@ -296,8 +296,9 @@ public class PathWalker extends Module {
 
         if (best.isEmpty()) return;
 
-        for (int i = 1; i < best.size() && i < MAX_PATH_STEPS; i++) {
-            plannedPath.add(best.get(i));
+        List<BlockPos> smoothed = smoothPath(best);
+        for (int i = 1; i < smoothed.size() && i < MAX_PATH_STEPS; i++) {
+            plannedPath.add(smoothed.get(i));
         }
     }
 
@@ -331,6 +332,9 @@ public class PathWalker extends Module {
                 if (closed.contains(neighbor)) continue;
 
                 double moveCost = current.pos.distanceSq(neighbor) + Math.abs(neighbor.getY() - current.pos.getY()) * 1.5;
+                if (isSolidBlock(mc, neighbor)) {
+                    moveCost += 6.0;
+                }
                 double turnPenalty = 0.0;
                 if (current.parent != null) {
                     int prevDx = current.pos.getX() - current.parent.pos.getX();
@@ -368,6 +372,52 @@ public class PathWalker extends Module {
         return cost;
     }
 
+
+    private List<BlockPos> smoothPath(List<BlockPos> path) {
+        if (path.size() < 3) return path;
+        List<BlockPos> result = new ArrayList<BlockPos>();
+        result.add(path.get(0));
+
+        int anchor = 0;
+        while (anchor < path.size() - 1) {
+            int furthest = anchor + 1;
+            for (int i = path.size() - 1; i > anchor + 1; i--) {
+                if (hasLineOfWalk(path.get(anchor), path.get(i))) {
+                    furthest = i;
+                    break;
+                }
+            }
+            result.add(path.get(furthest));
+            anchor = furthest;
+        }
+        return result;
+    }
+
+    private boolean hasLineOfWalk(BlockPos from, BlockPos to) {
+        Minecraft mc = Minecraft.getMinecraft();
+        Vec3 start = new Vec3(from.getX() + 0.5, from.getY() + 1.0, from.getZ() + 0.5);
+        Vec3 end = new Vec3(to.getX() + 0.5, to.getY() + 1.0, to.getZ() + 0.5);
+        MovingObjectPosition hit = mc.theWorld.rayTraceBlocks(start, end, false, true, false);
+        return hit == null;
+    }
+
+    private BlockPos findDiggableStep(Minecraft mc, BlockPos check, int currentY) {
+        BlockPos feet = new BlockPos(check.getX(), currentY, check.getZ());
+        BlockPos head = feet.up();
+        BlockPos ground = feet.down();
+        if (!isSolidBlock(mc, ground)) return null;
+
+        Block feetBlock = mc.theWorld.getBlockState(feet).getBlock();
+        Block headBlock = mc.theWorld.getBlockState(head).getBlock();
+        boolean feetDiggable = feetBlock != Blocks.air && feetBlock != Blocks.bedrock && feetBlock.getBlockHardness(mc.theWorld, feet) >= 0;
+        boolean headFree = !isSolidBlock(mc, head) || (headBlock != Blocks.bedrock && headBlock.getBlockHardness(mc.theWorld, head) >= 0);
+
+        if (feetDiggable && headFree) {
+            return feet;
+        }
+        return null;
+    }
+
     private List<BlockPos> reconstruct(Node end) {
         LinkedList<BlockPos> path = new LinkedList<BlockPos>();
         Node n = end;
@@ -394,6 +444,11 @@ public class PathWalker extends Module {
                 BlockPos walk = findClosestWalkable(mc, check);
                 if (walk != null && Math.abs(walk.getY() - pos.getY()) <= 1) {
                     neighbors.add(walk);
+                } else {
+                    BlockPos tunnel = findDiggableStep(mc, check, pos.getY());
+                    if (tunnel != null) {
+                        neighbors.add(tunnel);
+                    }
                 }
             }
         }

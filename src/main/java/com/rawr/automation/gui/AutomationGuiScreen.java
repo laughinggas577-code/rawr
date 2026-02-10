@@ -18,6 +18,7 @@ public class AutomationGuiScreen extends GuiScreen {
 
     private static final int STOP_ALL_ID = 5000;
     private static final int AUTO_MINE_MENU_ID = 5001;
+    private static final String WELCOME_KEY = "AutomationGuiWelcomed";
 
     private final ModuleManager moduleManager;
     private final ModConfig config;
@@ -36,6 +37,12 @@ public class AutomationGuiScreen extends GuiScreen {
         int x = this.width / 2 - 100;
         int y = this.height / 2 - 80;
         int id = 0;
+
+        if (!config.getBoolean(WELCOME_KEY, false) && Minecraft.getMinecraft().thePlayer != null) {
+            Minecraft.getMinecraft().thePlayer.addChatMessage(new net.minecraft.util.ChatComponentText("\u00a76[Rawr] \u00a7fWelcome! Open modules and get moving."));
+            config.setBoolean(WELCOME_KEY, true);
+            config.save();
+        }
 
         AutoMine autoMine = (AutoMine) moduleManager.getModule("automine");
         if (autoMine != null) {

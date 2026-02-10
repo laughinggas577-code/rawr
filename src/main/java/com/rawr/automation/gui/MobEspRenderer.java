@@ -4,6 +4,7 @@ import com.rawr.automation.modules.MobESP;
 import com.rawr.automation.modules.ModuleManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.client.gui.Gui;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.WorldRenderer;
@@ -108,7 +109,7 @@ public class MobEspRenderer {
         GlStateManager.scale(-0.025F, -0.025F, 0.025F);
 
         int width = mc.fontRendererObj.getStringWidth(name) / 2;
-        drawRect(-width - 2, -2, width + 2, 9, 0x90000000);
+        Gui.drawRect(-width - 2, -2, width + 2, 9, 0x90000000);
         mc.fontRendererObj.drawString(name, -width, 0, 0xFFFFFF);
         GlStateManager.popMatrix();
     }
