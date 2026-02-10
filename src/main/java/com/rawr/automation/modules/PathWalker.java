@@ -19,7 +19,6 @@ public class PathWalker extends Module {
     private static final int PATH_RADIUS = 16;
     private static final int MAX_PATH_STEPS = 128;
     private static final double ARRIVAL_DISTANCE = 1.8;
-    private static final float MAX_ROTATION_SPEED = 26.0f;
 
     private final Random random = new Random();
     private final List<BlockPos> plannedPath = new ArrayList<>();
@@ -46,6 +45,8 @@ public class PathWalker extends Module {
     private int planningTicksRemaining;
     private int repathCooldown;
     private int digCooldown;
+
+    private double headRotationScale = 5.0;
 
     public PathWalker() {
         super("PathWalker", "Auto-walks to specified coordinates");
@@ -75,6 +76,20 @@ public class PathWalker extends Module {
     public BlockPos getCurrentWaypoint() { return currentWaypoint; }
 
     public String getCurrentAction() { return currentAction; }
+
+    public boolean isMovementActive() {
+        return isEnabled() && target != null && planningTicksRemaining <= 0;
+    }
+
+    public double getHeadRotationScale() {
+        return headRotationScale;
+    }
+
+    public void setHeadRotationScale(double scale) {
+        if (scale < 1.0) scale = 1.0;
+        if (scale > 10.0) scale = 10.0;
+        this.headRotationScale = Math.round(scale * 2.0) / 2.0;
+    }
 
     @Override
     protected void onDisable() {
@@ -182,8 +197,11 @@ public class PathWalker extends Module {
         float targetPitch = (float) (-Math.atan2(sy, dist) * 180.0 / Math.PI);
         targetPitch = MathHelper.clamp_float(targetPitch, -45.0f, 45.0f);
 
-        currentYaw = smoothAngleEaseInOut(currentYaw, targetYaw, MAX_ROTATION_SPEED);
-        currentPitch = smoothAngleEaseInOut(currentPitch, targetPitch, MAX_ROTATION_SPEED * 0.6f);
+        float yawStep = getScaledRotationStep();
+        float pitchStep = Math.max(1.0f, yawStep * 0.6f);
+
+        currentYaw = smoothAngleEaseInOut(currentYaw, targetYaw, yawStep);
+        currentPitch = smoothAngleEaseInOut(currentPitch, targetPitch, pitchStep);
         player.rotationYaw = currentYaw;
         player.rotationPitch = currentPitch;
     }
@@ -412,6 +430,12 @@ public class PathWalker extends Module {
         if (block == Blocks.air) return false;
         Material material = block.getMaterial();
         return material.isSolid() && material.blocksMovement();
+    }
+
+    private float getScaledRotationStep() {
+        // 1.0 = snappy, 10.0 = very smooth
+        double t = (headRotationScale - 1.0) / 9.0;
+        return (float) (32.0 - (t * 27.0));
     }
 
     private float smoothAngleEaseInOut(float current, float target, float maxStep) {

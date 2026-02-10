@@ -17,8 +17,11 @@ public class PathWalkerTargetGuiScreen extends GuiScreen {
     private static final int START_BUTTON_ID = 0;
     private static final int CANCEL_BUTTON_ID = 1;
     private static final int HISTORY_BASE_ID = 100;
+    private static final int ROTATION_MINUS_ID = 300;
+    private static final int ROTATION_PLUS_ID = 301;
     private static final int MAX_HISTORY = 8;
     private static final String HISTORY_KEY = "PathWalkerHistory";
+    private static final String ROTATION_SCALE_KEY = "PathWalkerHeadRotationScale";
 
     private final AutomationGuiScreen parentScreen;
     private final PathWalker pathWalker;
@@ -30,6 +33,7 @@ public class PathWalkerTargetGuiScreen extends GuiScreen {
     private GuiTextField yField;
     private GuiTextField zField;
     private String errorMessage = "";
+    private double rotationScale = 5.0;
 
     public PathWalkerTargetGuiScreen(AutomationGuiScreen parentScreen, PathWalker pathWalker, ModConfig config) {
         this.parentScreen = parentScreen;
@@ -42,6 +46,8 @@ public class PathWalkerTargetGuiScreen extends GuiScreen {
         this.buttonList.clear();
 
         loadHistory();
+        rotationScale = config.getInt(ROTATION_SCALE_KEY, 10) / 2.0;
+        pathWalker.setHeadRotationScale(rotationScale);
 
         int centerX = this.width / 2;
         int startY = this.height / 2 - 35;
@@ -65,6 +71,9 @@ public class PathWalkerTargetGuiScreen extends GuiScreen {
             CoordEntry entry = historyEntries.get(i);
             this.buttonList.add(new GuiButton(HISTORY_BASE_ID + i, historyX, historyY + (i * 22), 100, 20, entry.asLabel()));
         }
+
+        this.buttonList.add(new GuiButton(ROTATION_MINUS_ID, centerX + 110, startY, 20, 20, "-"));
+        this.buttonList.add(new GuiButton(ROTATION_PLUS_ID, centerX + 190, startY, 20, 20, "+"));
     }
 
     @Override
@@ -91,6 +100,16 @@ public class PathWalkerTargetGuiScreen extends GuiScreen {
         if (button.id >= HISTORY_BASE_ID && button.id < HISTORY_BASE_ID + historyEntries.size()) {
             CoordEntry entry = historyEntries.get(button.id - HISTORY_BASE_ID);
             runPath(entry.x, entry.y, entry.z);
+            return;
+        }
+
+        if (button.id == ROTATION_MINUS_ID) {
+            setRotationScale(rotationScale - 0.5);
+            return;
+        }
+
+        if (button.id == ROTATION_PLUS_ID) {
+            setRotationScale(rotationScale + 0.5);
         }
     }
 
@@ -128,6 +147,8 @@ public class PathWalkerTargetGuiScreen extends GuiScreen {
         drawString(this.fontRendererObj, "Y", this.width / 2 - 38, this.height / 2 - 27, 0xFFFFFF);
         drawString(this.fontRendererObj, "Z", this.width / 2 + 32, this.height / 2 - 27, 0xFFFFFF);
         drawString(this.fontRendererObj, EnumChatFormatting.LIGHT_PURPLE + "History", this.width / 2 - 210, this.height / 2 - 45, 0xFFFFFF);
+        drawString(this.fontRendererObj, "Head Rot", this.width / 2 + 135, this.height / 2 - 45, 0xFFFFFF);
+        drawString(this.fontRendererObj, EnumChatFormatting.AQUA + String.format("%.1f", rotationScale), this.width / 2 + 157, this.height / 2 - 27, 0xFFFFFF);
 
         xField.drawTextBox();
         yField.drawTextBox();
@@ -146,12 +167,22 @@ public class PathWalkerTargetGuiScreen extends GuiScreen {
     }
 
     private void runPath(int x, int y, int z) {
+        pathWalker.setHeadRotationScale(rotationScale);
         pathWalker.setTarget(x, y, z);
         pathWalker.setEnabled(true);
         addHistory(x, y, z);
         config.setBoolean(pathWalker.getName(), true);
+        config.setInt(ROTATION_SCALE_KEY, (int) Math.round(rotationScale * 2.0));
         config.save();
         Minecraft.getMinecraft().displayGuiScreen(parentScreen);
+    }
+
+
+    private void setRotationScale(double value) {
+        if (value < 1.0) value = 1.0;
+        if (value > 10.0) value = 10.0;
+        rotationScale = Math.round(value * 2.0) / 2.0;
+        pathWalker.setHeadRotationScale(rotationScale);
     }
 
     private Integer parseInt(String value) {

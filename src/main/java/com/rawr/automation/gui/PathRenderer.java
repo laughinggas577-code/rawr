@@ -33,7 +33,7 @@ public class PathRenderer {
     @SubscribeEvent
     public void onRenderWorldLast(RenderWorldLastEvent event) {
         PathWalker walker = (PathWalker) moduleManager.getModule("pathwalker");
-        if (walker == null || !walker.isEnabled()) return;
+        if (walker == null || !walker.isEnabled() || !walker.isMovementActive()) return;
 
         Minecraft mc = Minecraft.getMinecraft();
         EntityPlayerSP player = mc.thePlayer;
