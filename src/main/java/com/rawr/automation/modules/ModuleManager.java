@@ -9,19 +9,27 @@ import java.util.Map;
 
 public class ModuleManager {
 
+    private static ModuleManager instance;
     private final Map<String, Module> modules = new LinkedHashMap<>();
 
     public ModuleManager() {
+        instance = this;
         registerModule(new AutoMine());
         registerModule(new AutoEat());
         registerModule(new AutoFish());
         registerModule(new AutoFarm());
         registerModule(new AutoAttack());
         registerModule(new PathWalker());
+        registerModule(new MobESP());
+        registerModule(new XRay());
     }
 
     private void registerModule(Module module) {
         modules.put(module.getName().toLowerCase(), module);
+    }
+
+    public static ModuleManager getInstance() {
+        return instance;
     }
 
     public Module getModule(String name) {
@@ -30,6 +38,15 @@ public class ModuleManager {
 
     public Map<String, Module> getModules() {
         return modules;
+    }
+
+
+    public void disableAllModules() {
+        for (Module module : modules.values()) {
+            if (module.isEnabled()) {
+                module.setEnabled(false);
+            }
+        }
     }
 
     public void loadSettings(ModConfig config) {
