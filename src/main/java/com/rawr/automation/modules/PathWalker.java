@@ -7,46 +7,41 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.init.Blocks;
-import net.minecraft.util.BlockPos;
-import net.minecraft.util.MathHelper;
+import net.minecraft.util.*;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 /**
- * PathWalker - Walks the player toward a target with smooth rotation,
- * block-level collision detection, predictive jumping, and gap/drop handling.
- * Exposes the planned path so a renderer can draw it in-world.
+ * PathWalker - Walks the player toward a target with smooth and human-like movement.
  */
 public class PathWalker extends Module {
 
-    private BlockPos target = null;
+    private static final int PATH_RADIUS = 16;
+    private static final int MAX_PATH_STEPS = 128;
+    private static final double ARRIVAL_DISTANCE = 1.8;
+    private static final float MAX_ROTATION_SPEED = 26.0f;
 
-    // Path data exposed for rendering
+    private final Random random = new Random();
     private final List<BlockPos> plannedPath = new ArrayList<>();
-    private BlockPos currentWaypoint = null;
+
+    private BlockPos target;
+    private BlockPos currentWaypoint;
     private String currentAction = "Idle";
 
-    // Smooth rotation state
     private float currentYaw = Float.NaN;
     private float currentPitch = Float.NaN;
-    private static final float YAW_SPEED = 6.0f;     // degrees per tick (smooth)
-    private static final float PITCH_SPEED = 3.0f;
 
-    // Arrival
-    private static final double ARRIVAL_DISTANCE = 1.8;
+    private int stuckTicks;
+    private int totalStuckTicks;
+    private double lastX;
+    private double lastY;
+    private double lastZ;
 
-    // Stuck detection
-    private int stuckTicks = 0;
-    private int totalStuckTicks = 0;
-    private double lastX, lastY, lastZ;
+    private int jumpCooldown;
+    private boolean wasJumping;
 
-    // Jump prediction
-    private int jumpCooldown = 0;
-    private boolean wasJumping = false;
-
-    // Scan range for path planning
-    private static final int LOOKAHEAD = 8;
+    private long nextPauseAt;
+    private long pauseUntil;
 
     public PathWalker() {
         super("PathWalker", "Auto-walks to specified coordinates");
@@ -61,23 +56,18 @@ public class PathWalker extends Module {
         this.plannedPath.clear();
         this.currentWaypoint = null;
         this.currentAction = "Starting";
+        long now = System.currentTimeMillis();
+        this.nextPauseAt = now + 3000 + random.nextInt(2000);
+        this.pauseUntil = 0;
     }
 
-    public BlockPos getTarget() {
-        return target;
-    }
+    public BlockPos getTarget() { return target; }
 
-    public List<BlockPos> getPlannedPath() {
-        return plannedPath;
-    }
+    public List<BlockPos> getPlannedPath() { return plannedPath; }
 
-    public BlockPos getCurrentWaypoint() {
-        return currentWaypoint;
-    }
+    public BlockPos getCurrentWaypoint() { return currentWaypoint; }
 
-    public String getCurrentAction() {
-        return currentAction;
-    }
+    public String getCurrentAction() { return currentAction; }
 
     @Override
     protected void onDisable() {
@@ -95,7 +85,6 @@ public class PathWalker extends Module {
         EntityPlayerSP player = mc.thePlayer;
         if (player == null || mc.theWorld == null || target == null) return;
 
-        // Initialize smooth rotation from player's current look
         if (Float.isNaN(currentYaw)) {
             currentYaw = player.rotationYaw;
             currentPitch = player.rotationPitch;
@@ -105,7 +94,6 @@ public class PathWalker extends Module {
         double dz = target.getZ() + 0.5 - player.posZ;
         double horizontalDist = Math.sqrt(dx * dx + dz * dz);
 
-        // Arrival check
         if (horizontalDist < ARRIVAL_DISTANCE) {
             sendChat("\u00a7a[Rawr] \u00a7fArrived at destination!");
             releaseMovementKeys(mc);
@@ -113,167 +101,116 @@ public class PathWalker extends Module {
             return;
         }
 
-        // Plan path (simple lookahead scan toward target)
         planPath(mc, player);
+        chooseWaypoint(player);
 
-        // Pick next waypoint from path
-        if (!plannedPath.isEmpty()) {
-            currentWaypoint = plannedPath.get(0);
-            // Remove waypoints we've already reached
-            while (!plannedPath.isEmpty()) {
-                BlockPos wp = plannedPath.get(0);
-                double wpDx = wp.getX() + 0.5 - player.posX;
-                double wpDz = wp.getZ() + 0.5 - player.posZ;
-                double wpDist = Math.sqrt(wpDx * wpDx + wpDz * wpDz);
-                if (wpDist < 1.2) {
-                    plannedPath.remove(0);
-                } else {
-                    currentWaypoint = wp;
-                    break;
-                }
+        BlockPos steering = currentWaypoint != null ? currentWaypoint : target;
+        applyRotation(player, steering);
+
+        boolean blockedAhead = isRayBlocked(mc, player, steering);
+        boolean shouldJump = blockedAhead && canStepUp(mc, player);
+
+        boolean microPause = shouldMicroPause();
+        if (microPause) {
+            releaseMovementKeys(mc);
+            currentAction = "Micro pause";
+        } else {
+            applyMovement(mc, player, horizontalDist, shouldJump, blockedAhead);
+        }
+
+        handleStuck(mc, player);
+
+        lastX = player.posX;
+        lastY = player.posY;
+        lastZ = player.posZ;
+    }
+
+    private void chooseWaypoint(EntityPlayerSP player) {
+        if (plannedPath.isEmpty()) {
+            currentWaypoint = null;
+            return;
+        }
+
+        while (!plannedPath.isEmpty()) {
+            BlockPos wp = plannedPath.get(0);
+            double wpDx = wp.getX() + 0.5 - player.posX;
+            double wpDz = wp.getZ() + 0.5 - player.posZ;
+            if (Math.sqrt(wpDx * wpDx + wpDz * wpDz) < 1.2) {
+                plannedPath.remove(0);
+            } else {
+                break;
             }
         }
+        currentWaypoint = plannedPath.isEmpty() ? null : plannedPath.get(0);
+    }
 
-        // Determine steering target
-        double steerX, steerY, steerZ;
-        if (currentWaypoint != null) {
-            steerX = currentWaypoint.getX() + 0.5;
-            steerY = currentWaypoint.getY();
-            steerZ = currentWaypoint.getZ() + 0.5;
-        } else {
-            steerX = target.getX() + 0.5;
-            steerY = target.getY();
-            steerZ = target.getZ() + 0.5;
-        }
+    private void applyRotation(EntityPlayerSP player, BlockPos steering) {
+        double sx = steering.getX() + 0.5 - player.posX;
+        double sy = steering.getY() - player.posY;
+        double sz = steering.getZ() + 0.5 - player.posZ;
+        double dist = Math.sqrt(sx * sx + sz * sz);
 
-        double sdx = steerX - player.posX;
-        double sdz = steerZ - player.posZ;
-        double sdy = steerY - player.posY;
-        double sDist = Math.sqrt(sdx * sdx + sdz * sdz);
+        // tiny wobble to avoid perfectly straight aim
+        float wobble = (float) ((random.nextDouble() - 0.5) * 1.6);
 
-        // ---- Smooth Rotation ----
-        float targetYaw = (float) (Math.atan2(-sdx, sdz) * 180.0 / Math.PI);
-        float targetPitch = (float) (-Math.atan2(sdy, sDist) * 180.0 / Math.PI);
-        targetPitch = MathHelper.clamp_float(targetPitch, -50.0f, 50.0f);
+        float targetYaw = (float) (Math.atan2(-sx, sz) * 180.0 / Math.PI) + wobble;
+        float targetPitch = (float) (-Math.atan2(sy, dist) * 180.0 / Math.PI);
+        targetPitch = MathHelper.clamp_float(targetPitch, -45.0f, 45.0f);
 
-        currentYaw = smoothAngle(currentYaw, targetYaw, YAW_SPEED);
-        currentPitch = smoothAngle(currentPitch, targetPitch, PITCH_SPEED);
+        currentYaw = smoothAngleEaseInOut(currentYaw, targetYaw, MAX_ROTATION_SPEED);
+        currentPitch = smoothAngleEaseInOut(currentPitch, targetPitch, MAX_ROTATION_SPEED * 0.6f);
         player.rotationYaw = currentYaw;
         player.rotationPitch = currentPitch;
+    }
 
-        // ---- Block Detection & Jump Prediction ----
-        BlockPos playerFeet = new BlockPos(player.posX, player.posY, player.posZ);
-        boolean shouldJump = false;
-        String action = "Walking";
+    private void applyMovement(Minecraft mc, EntityPlayerSP player, double horizontalDist, boolean shouldJump, boolean blockedAhead) {
+        float moveVariance = 0.90f + random.nextFloat() * 0.2f; // ±10%
+        boolean shouldMoveForward = moveVariance > 0.93f;
+        KeyBinding.setKeyBindState(mc.gameSettings.keyBindForward.getKeyCode(), shouldMoveForward);
+
+        boolean sprint = horizontalDist > 8.0 && !shouldJump && moveVariance > 1.0f;
+        KeyBinding.setKeyBindState(mc.gameSettings.keyBindSprint.getKeyCode(), sprint);
 
         if (jumpCooldown > 0) jumpCooldown--;
-
-        // Look 1-2 blocks ahead in the movement direction
-        double lookDirX = -MathHelper.sin(currentYaw * (float) Math.PI / 180.0f);
-        double lookDirZ = MathHelper.cos(currentYaw * (float) Math.PI / 180.0f);
-
-        // Check blocks ahead at feet level and head level
-        for (int step = 1; step <= 2; step++) {
-            BlockPos aheadFeet = new BlockPos(
-                    player.posX + lookDirX * step,
-                    player.posY,
-                    player.posZ + lookDirZ * step
-            );
-            BlockPos aheadAbove = aheadFeet.up();
-            BlockPos aheadBelow = aheadFeet.down();
-
-            boolean feetSolid = isSolidBlock(mc, aheadFeet);
-            boolean aboveSolid = isSolidBlock(mc, aheadAbove);
-            boolean groundBelow = isSolidBlock(mc, aheadBelow);
-
-            if (step == 1) {
-                // Wall ahead at feet level -> need to jump
-                if (feetSolid && !aboveSolid && !isSolidBlock(mc, aheadFeet.up(2))) {
-                    shouldJump = true;
-                    action = "Jumping over block";
-                    break;
-                }
-
-                // Fence or 1.5-height block
-                if (feetSolid) {
-                    shouldJump = true;
-                    action = "Jumping obstacle";
-                    break;
-                }
-
-                // Gap detection: no ground below and no ground at feet -> gap
-                if (!feetSolid && !groundBelow) {
-                    // Check if there's a 2-deep drop
-                    BlockPos twoDown = aheadFeet.down(2);
-                    if (!isSolidBlock(mc, twoDown)) {
-                        // Deep gap - jump over it
-                        shouldJump = true;
-                        action = "Jumping gap";
-                    } else {
-                        action = "Descending";
-                    }
-                }
-            }
-
-            if (step == 2 && !shouldJump) {
-                // Predict upcoming wall 2 blocks ahead -> pre-jump
-                if (feetSolid && !aboveSolid) {
-                    shouldJump = true;
-                    action = "Pre-jumping wall";
-                }
-            }
-        }
-
-        // Stair detection: block at feet+1 ahead with air at feet+2
-        BlockPos stairCheck = new BlockPos(
-                player.posX + lookDirX,
-                player.posY + 1,
-                player.posZ + lookDirZ
-        );
-        if (isSolidBlock(mc, stairCheck) && !isSolidBlock(mc, stairCheck.up())) {
-            shouldJump = true;
-            action = "Climbing stairs";
-        }
-
-        currentAction = action;
-
-        // ---- Movement Keys ----
-        KeyBinding.setKeyBindState(mc.gameSettings.keyBindForward.getKeyCode(), true);
-
-        // Sprint when far
-        boolean sprint = horizontalDist > 8.0 && !shouldJump;
-        KeyBinding.setKeyBindState(mc.gameSettings.keyBindSprint.getKeyCode(), sprint);
-        if (sprint) {
-            currentAction = "Sprinting";
-        }
-
-        // ---- Jump Execution ----
         if (shouldJump && player.onGround && jumpCooldown <= 0) {
             KeyBinding.setKeyBindState(mc.gameSettings.keyBindJump.getKeyCode(), true);
             wasJumping = true;
-            jumpCooldown = 6; // Prevent jump spam
+            jumpCooldown = 6;
+            currentAction = "Jumping obstacle";
         } else if (wasJumping && player.onGround) {
             KeyBinding.setKeyBindState(mc.gameSettings.keyBindJump.getKeyCode(), false);
             wasJumping = false;
+            currentAction = blockedAhead ? "Adjusting route" : (sprint ? "Sprinting" : "Walking");
+        } else {
+            KeyBinding.setKeyBindState(mc.gameSettings.keyBindJump.getKeyCode(), false);
+            currentAction = blockedAhead ? "Avoiding obstacle" : (sprint ? "Sprinting" : "Walking");
         }
+    }
 
-        // ---- Stuck Detection ----
-        double moved = Math.sqrt(
-                Math.pow(player.posX - lastX, 2) +
-                Math.pow(player.posY - lastY, 2) +
-                Math.pow(player.posZ - lastZ, 2)
-        );
+    private boolean shouldMicroPause() {
+        long now = System.currentTimeMillis();
+        if (pauseUntil > now) {
+            return true;
+        }
+        if (now >= nextPauseAt) {
+            pauseUntil = now + 50 + random.nextInt(51);
+            nextPauseAt = now + 3000 + random.nextInt(2000);
+            return true;
+        }
+        return false;
+    }
+
+    private void handleStuck(Minecraft mc, EntityPlayerSP player) {
+        double moved = Math.sqrt(Math.pow(player.posX - lastX, 2) + Math.pow(player.posY - lastY, 2) + Math.pow(player.posZ - lastZ, 2));
 
         if (moved < 0.03 && player.onGround) {
             stuckTicks++;
             totalStuckTicks++;
             if (stuckTicks > 8) {
-                // Force jump when stuck
                 KeyBinding.setKeyBindState(mc.gameSettings.keyBindJump.getKeyCode(), true);
                 currentAction = "Unsticking (jump)";
             }
             if (stuckTicks > 20) {
-                // Try strafing to get around obstacle
                 KeyBinding.setKeyBindState(mc.gameSettings.keyBindLeft.getKeyCode(), true);
                 currentAction = "Unsticking (strafe)";
             }
@@ -285,84 +222,125 @@ public class PathWalker extends Module {
                 sendChat("\u00a7c[Rawr] \u00a7fPath blocked! Stopping.");
                 releaseMovementKeys(mc);
                 setEnabled(false);
-                return;
             }
         } else {
             stuckTicks = 0;
             KeyBinding.setKeyBindState(mc.gameSettings.keyBindLeft.getKeyCode(), false);
         }
-
-        lastX = player.posX;
-        lastY = player.posY;
-        lastZ = player.posZ;
     }
 
-    /**
-     * Plans a simple path toward the target by scanning blocks in a line.
-     * Produces waypoints that account for elevation changes.
-     */
     private void planPath(Minecraft mc, EntityPlayerSP player) {
         plannedPath.clear();
 
-        double dx = target.getX() + 0.5 - player.posX;
-        double dz = target.getZ() + 0.5 - player.posZ;
-        double totalDist = Math.sqrt(dx * dx + dz * dz);
-        if (totalDist < 1.0) return;
+        BlockPos start = findClosestWalkable(mc, new BlockPos(player.posX, player.posY, player.posZ));
+        BlockPos goal = findClosestWalkable(mc, target);
+        if (start == null || goal == null) return;
 
-        double stepX = dx / totalDist;
-        double stepZ = dz / totalDist;
+        List<BlockPos> path = findPathAStar(mc, start, goal);
+        if (path.isEmpty()) return;
 
-        int steps = Math.min(LOOKAHEAD, (int) Math.ceil(totalDist));
-        double curX = player.posX;
-        double curZ = player.posZ;
-        int curY = (int) Math.floor(player.posY);
-
-        for (int i = 1; i <= steps; i++) {
-            curX += stepX;
-            curZ += stepZ;
-
-            BlockPos checkPos = new BlockPos(curX, curY, curZ);
-
-            // Scan vertically to find walkable ground
-            int bestY = findWalkableY(mc, checkPos, curY);
-            if (bestY == Integer.MIN_VALUE) {
-                // No walkable position found, stop planning
-                break;
-            }
-
-            curY = bestY;
-            plannedPath.add(new BlockPos(checkPos.getX(), curY, checkPos.getZ()));
+        for (int i = 1; i < path.size() && i < MAX_PATH_STEPS; i++) {
+            plannedPath.add(path.get(i));
         }
     }
 
-    /**
-     * Finds the best walkable Y level near a position, searching up and down from currentY.
-     * A walkable position has solid ground below, air at feet and head level.
-     */
-    private int findWalkableY(Minecraft mc, BlockPos pos, int currentY) {
-        // Search up to 3 blocks above and 4 blocks below
-        for (int dy = 0; dy <= 3; dy++) {
-            // Check above
-            int upY = currentY + dy;
-            if (isWalkable(mc, pos.getX(), upY, pos.getZ())) {
-                return upY;
+    private List<BlockPos> findPathAStar(Minecraft mc, BlockPos start, BlockPos goal) {
+        PriorityQueue<Node> open = new PriorityQueue<Node>();
+        Map<BlockPos, Node> allNodes = new HashMap<BlockPos, Node>();
+        Set<BlockPos> closed = new HashSet<BlockPos>();
+
+        Node startNode = new Node(start, null, 0, heuristic(start, goal));
+        open.add(startNode);
+        allNodes.put(start, startNode);
+
+        while (!open.isEmpty()) {
+            Node current = open.poll();
+            if (current.pos.equals(goal)) {
+                return reconstruct(current);
             }
-            // Check below
-            if (dy > 0) {
-                int downY = currentY - dy;
-                if (downY > 0 && isWalkable(mc, pos.getX(), downY, pos.getZ())) {
-                    return downY;
+            if (closed.contains(current.pos)) continue;
+            closed.add(current.pos);
+
+            if (Math.abs(current.pos.getX() - start.getX()) > PATH_RADIUS || Math.abs(current.pos.getZ() - start.getZ()) > PATH_RADIUS) {
+                continue;
+            }
+
+            for (BlockPos neighbor : getNeighbors(mc, current.pos)) {
+                if (closed.contains(neighbor)) continue;
+
+                double tentativeG = current.g + current.pos.distanceSq(neighbor);
+                Node node = allNodes.get(neighbor);
+                if (node == null || tentativeG < node.g) {
+                    Node next = new Node(neighbor, current, tentativeG, heuristic(neighbor, goal));
+                    allNodes.put(neighbor, next);
+                    open.add(next);
                 }
             }
         }
-        return Integer.MIN_VALUE;
+
+        return Collections.emptyList();
+    }
+
+    private List<BlockPos> reconstruct(Node end) {
+        LinkedList<BlockPos> path = new LinkedList<BlockPos>();
+        Node n = end;
+        while (n != null) {
+            path.addFirst(n.pos);
+            n = n.parent;
+        }
+        return path;
+    }
+
+    private double heuristic(BlockPos a, BlockPos b) {
+        double dx = a.getX() - b.getX();
+        double dz = a.getZ() - b.getZ();
+        return Math.sqrt(dx * dx + dz * dz);
+    }
+
+    private List<BlockPos> getNeighbors(Minecraft mc, BlockPos pos) {
+        List<BlockPos> neighbors = new ArrayList<BlockPos>(8);
+        for (int ox = -1; ox <= 1; ox++) {
+            for (int oz = -1; oz <= 1; oz++) {
+                if (ox == 0 && oz == 0) continue;
+
+                BlockPos check = new BlockPos(pos.getX() + ox, pos.getY(), pos.getZ() + oz);
+                BlockPos walk = findClosestWalkable(mc, check);
+                if (walk != null && Math.abs(walk.getY() - pos.getY()) <= 1) {
+                    neighbors.add(walk);
+                }
+            }
+        }
+        return neighbors;
+    }
+
+    private BlockPos findClosestWalkable(Minecraft mc, BlockPos origin) {
+        for (int dy = 2; dy >= -3; dy--) {
+            BlockPos p = origin.add(0, dy, 0);
+            if (isWalkable(mc, p.getX(), p.getY(), p.getZ())) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    private boolean isRayBlocked(Minecraft mc, EntityPlayerSP player, BlockPos to) {
+        Vec3 from = new Vec3(player.posX, player.posY + player.getEyeHeight(), player.posZ);
+        Vec3 targetVec = new Vec3(to.getX() + 0.5, to.getY() + 0.8, to.getZ() + 0.5);
+        MovingObjectPosition hit = mc.theWorld.rayTraceBlocks(from, targetVec, false, true, false);
+        return hit != null && hit.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK && !hit.getBlockPos().equals(to);
+    }
+
+    private boolean canStepUp(Minecraft mc, EntityPlayerSP player) {
+        double dirX = -MathHelper.sin(player.rotationYaw * (float) Math.PI / 180.0f);
+        double dirZ = MathHelper.cos(player.rotationYaw * (float) Math.PI / 180.0f);
+        BlockPos aheadFeet = new BlockPos(player.posX + dirX, player.posY, player.posZ + dirZ);
+        return isSolidBlock(mc, aheadFeet) && !isSolidBlock(mc, aheadFeet.up()) && !isSolidBlock(mc, aheadFeet.up(2));
     }
 
     private boolean isWalkable(Minecraft mc, int x, int y, int z) {
         BlockPos ground = new BlockPos(x, y - 1, z);
         BlockPos feet = new BlockPos(x, y, z);
         BlockPos head = new BlockPos(x, y + 1, z);
-
         return isSolidBlock(mc, ground) && !isSolidBlock(mc, feet) && !isSolidBlock(mc, head);
     }
 
@@ -370,17 +348,19 @@ public class PathWalker extends Module {
         IBlockState state = mc.theWorld.getBlockState(pos);
         Block block = state.getBlock();
         if (block == Blocks.air) return false;
-        Material mat = block.getMaterial();
-        return mat.isSolid() && mat.blocksMovement();
+        Material material = block.getMaterial();
+        return material.isSolid() && material.blocksMovement();
     }
 
-    private float smoothAngle(float current, float target, float maxStep) {
+    private float smoothAngleEaseInOut(float current, float target, float maxStep) {
         float delta = MathHelper.wrapAngleTo180_float(target - current);
-        // Ease-out: faster when far, slower when close
-        float dynamicSpeed = Math.max(maxStep * 0.3f, Math.abs(delta) * 0.15f);
-        dynamicSpeed = Math.min(dynamicSpeed, maxStep);
-        if (delta > dynamicSpeed) delta = dynamicSpeed;
-        if (delta < -dynamicSpeed) delta = -dynamicSpeed;
+        float distance = Math.abs(delta);
+        float t = MathHelper.clamp_float(distance / maxStep, 0.0f, 1.0f);
+        // smootherstep ease-in-out
+        float eased = t * t * t * (t * (t * 6 - 15) + 10);
+        float allowed = Math.max(1.0f, eased * maxStep);
+        if (delta > allowed) delta = allowed;
+        if (delta < -allowed) delta = -allowed;
         return current + delta;
     }
 
@@ -393,8 +373,25 @@ public class PathWalker extends Module {
     }
 
     private void sendChat(String message) {
-        Minecraft.getMinecraft().ingameGUI.getChatGUI().printChatMessage(
-                new net.minecraft.util.ChatComponentText(message)
-        );
+        Minecraft.getMinecraft().ingameGUI.getChatGUI().printChatMessage(new ChatComponentText(message));
+    }
+
+    private static class Node implements Comparable<Node> {
+        private final BlockPos pos;
+        private final Node parent;
+        private final double g;
+        private final double f;
+
+        private Node(BlockPos pos, Node parent, double g, double h) {
+            this.pos = pos;
+            this.parent = parent;
+            this.g = g;
+            this.f = g + h;
+        }
+
+        @Override
+        public int compareTo(Node other) {
+            return Double.compare(this.f, other.f);
+        }
     }
 }

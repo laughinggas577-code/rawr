@@ -6,6 +6,8 @@ import net.minecraft.entity.projectile.EntityFishHook;
 import net.minecraft.item.ItemFishingRod;
 import net.minecraft.item.ItemStack;
 
+import java.lang.reflect.Method;
+
 /**
  * AutoFish - Automatically reels in fish and recasts the rod.
  * Detects when the bobber dips (fish bite) and reels in, then recasts.
@@ -19,6 +21,13 @@ public class AutoFish extends Module {
         RECASTING
     }
 
+    private static final String[] RIGHT_CLICK_METHODS = {
+            "rightClickMouse",
+            "func_147121_ag",
+            "ag"
+    };
+
+    private Method rightClickMethod;
     private State state = State.IDLE;
     private int tickDelay = 0;
     private double lastBobberY = 0;
@@ -46,7 +55,6 @@ public class AutoFish extends Module {
         EntityPlayerSP player = mc.thePlayer;
         if (player == null || mc.theWorld == null || mc.currentScreen != null) return;
 
-        // Check if holding a fishing rod
         ItemStack held = player.getHeldItem();
         if (held == null || !(held.getItem() instanceof ItemFishingRod)) {
             state = State.IDLE;
@@ -63,13 +71,13 @@ public class AutoFish extends Module {
                 handleIdle(mc, player);
                 break;
             case WAITING_FOR_BITE:
-                handleWaiting(mc, player);
+                handleWaiting(player);
                 break;
             case REELING_IN:
-                handleReeling(mc, player);
+                handleReeling(mc);
                 break;
             case RECASTING:
-                handleRecasting(mc, player);
+                handleRecasting(mc);
                 break;
         }
     }
@@ -77,54 +85,47 @@ public class AutoFish extends Module {
     private void handleIdle(Minecraft mc, EntityPlayerSP player) {
         EntityFishHook hook = player.fishEntity;
         if (hook != null) {
-            // Already cast, start waiting
             state = State.WAITING_FOR_BITE;
             lastBobberY = hook.posY;
             stableTicks = 0;
         } else {
-            // Cast the rod
             rightClick(mc);
-            tickDelay = 20; // Wait 1 second for cast
+            tickDelay = 20;
             state = State.WAITING_FOR_BITE;
         }
     }
 
-    private void handleWaiting(Minecraft mc, EntityPlayerSP player) {
+    private void handleWaiting(EntityPlayerSP player) {
         EntityFishHook hook = player.fishEntity;
         if (hook == null) {
             state = State.IDLE;
             return;
         }
 
-        // Wait for bobber to settle
         if (stableTicks < 10) {
             lastBobberY = hook.posY;
             stableTicks++;
             return;
         }
 
-        // Detect a bite: the bobber drops quickly (Y decreases)
         double currentY = hook.posY;
         double yDelta = lastBobberY - currentY;
 
         if (yDelta > 0.05) {
-            // Fish bite detected!
             state = State.REELING_IN;
-            tickDelay = 2; // Small delay to be natural
+            tickDelay = 2;
         }
 
         lastBobberY = currentY;
     }
 
-    private void handleReeling(Minecraft mc, EntityPlayerSP player) {
-        // Reel in the fish
+    private void handleReeling(Minecraft mc) {
         rightClick(mc);
         state = State.RECASTING;
-        tickDelay = 15; // Wait before recasting
+        tickDelay = 15;
     }
 
-    private void handleRecasting(Minecraft mc, EntityPlayerSP player) {
-        // Cast again
+    private void handleRecasting(Minecraft mc) {
         rightClick(mc);
         state = State.WAITING_FOR_BITE;
         lastBobberY = 0;
@@ -133,7 +134,29 @@ public class AutoFish extends Module {
     }
 
     private void rightClick(Minecraft mc) {
-        // Simulate right click
-        mc.rightClickMouse();
+        try {
+            Method method = resolveRightClickMethod();
+            if (method != null) {
+                method.invoke(mc);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private Method resolveRightClickMethod() {
+        if (rightClickMethod != null) {
+            return rightClickMethod;
+        }
+
+        for (String methodName : RIGHT_CLICK_METHODS) {
+            try {
+                Method method = Minecraft.class.getDeclaredMethod(methodName);
+                method.setAccessible(true);
+                rightClickMethod = method;
+                return rightClickMethod;
+            } catch (NoSuchMethodException ignored) {
+            }
+        }
+        return null;
     }
 }

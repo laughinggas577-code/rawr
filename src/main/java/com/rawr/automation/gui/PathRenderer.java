@@ -71,19 +71,18 @@ public class PathRenderer {
             boolean isCurrent = pos.equals(currentWP);
 
             if (isCurrent) {
-                // Current waypoint: bright cyan pulsing
-                drawBlockOutline(pos, 0.0f, 1.0f, 1.0f, pulse * 0.9f);
-                drawBlockFill(pos, 0.0f, 1.0f, 1.0f, pulse * 0.15f);
+                BlockPos renderPos = pos.up();
+                drawBlockOutline(renderPos, 0.8f, 0.2f, 1.0f, pulse * 0.9f);
+                drawBlockFill(renderPos, 0.8f, 0.2f, 1.0f, pulse * 0.15f);
             } else {
-                // Future waypoints: green fading with distance
                 float alpha = Math.max(0.2f, 1.0f - (i * 0.12f));
-                drawBlockOutline(pos, 0.3f, 1.0f, 0.3f, alpha * 0.7f);
+                drawBlockOutline(pos.up(), 0.7f, 0.3f, 1.0f, alpha * 0.7f);
             }
         }
 
         // Draw connecting line between waypoints
         if (path.size() >= 2) {
-            drawPathLine(path, 0.3f, 1.0f, 0.5f, 0.6f);
+            drawPathLine(path, 0.7f, 0.3f, 1.0f, 0.8f);
         }
 
         // Draw line from player to first waypoint
@@ -91,19 +90,19 @@ public class PathRenderer {
             BlockPos first = path.get(0);
             drawLine(
                     player.posX, player.posY + 0.1, player.posZ,
-                    first.getX() + 0.5, first.getY() + 0.1, first.getZ() + 0.5,
-                    0.0f, 0.8f, 1.0f, 0.5f
+                    first.getX() + 0.5, first.getY() + 1.1, first.getZ() + 0.5,
+                    0.7f, 0.3f, 1.0f, 0.5f
             );
         }
 
         // Draw target destination marker
         if (target != null) {
-            drawBlockOutline(target, 1.0f, 0.3f, 0.1f, pulse * 0.9f);
-            drawBlockFill(target, 1.0f, 0.4f, 0.1f, pulse * 0.2f);
+            drawBlockOutline(target.up(), 1.0f, 0.3f, 0.1f, pulse * 0.9f);
+            drawBlockFill(target.up(), 1.0f, 0.4f, 0.1f, pulse * 0.2f);
             // Vertical beacon line above target
             drawLine(
-                    target.getX() + 0.5, target.getY(), target.getZ() + 0.5,
-                    target.getX() + 0.5, target.getY() + 6, target.getZ() + 0.5,
+                    target.getX() + 0.5, target.getY() + 1, target.getZ() + 0.5,
+                    target.getX() + 0.5, target.getY() + 7, target.getZ() + 0.5,
                     1.0f, 0.5f, 0.1f, pulse * 0.4f
             );
         }
@@ -227,7 +226,7 @@ public class PathRenderer {
 
         wr.begin(GL11.GL_LINE_STRIP, DefaultVertexFormats.POSITION_COLOR);
         for (BlockPos pos : path) {
-            wr.pos(pos.getX() + 0.5, pos.getY() + 0.1, pos.getZ() + 0.5)
+            wr.pos(pos.getX() + 0.5, pos.getY() + 1.1, pos.getZ() + 0.5)
               .color(r, g, b, a).endVertex();
         }
         tess.draw();

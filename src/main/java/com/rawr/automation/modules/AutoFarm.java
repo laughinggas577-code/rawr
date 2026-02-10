@@ -53,9 +53,8 @@ public class AutoFarm extends Module {
 
         if (block instanceof BlockCrops) {
             // Wheat, carrots, potatoes
-            int age = ((BlockCrops) block).getAge(state);
-            int maxAge = ((BlockCrops) block).getMaxAge();
-            if (age >= maxAge) {
+            int age = block.getMetaFromState(state);
+            if (age >= 7) {
                 breakAndReplant(mc, player, pos, block);
             }
         } else if (block == Blocks.nether_wart) {

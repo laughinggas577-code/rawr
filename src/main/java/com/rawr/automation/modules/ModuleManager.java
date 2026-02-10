@@ -32,6 +32,15 @@ public class ModuleManager {
         return modules;
     }
 
+
+    public void disableAllModules() {
+        for (Module module : modules.values()) {
+            if (module.isEnabled()) {
+                module.setEnabled(false);
+            }
+        }
+    }
+
     public void loadSettings(ModConfig config) {
         for (Module module : modules.values()) {
             boolean wasEnabled = config.getBoolean(module.getName(), false);
