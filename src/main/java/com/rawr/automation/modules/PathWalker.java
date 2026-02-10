@@ -43,6 +43,10 @@ public class PathWalker extends Module {
     private long nextPauseAt;
     private long pauseUntil;
 
+    private int planningTicksRemaining;
+    private int repathCooldown;
+    private int digCooldown;
+
     public PathWalker() {
         super("PathWalker", "Auto-walks to specified coordinates");
     }
@@ -59,6 +63,9 @@ public class PathWalker extends Module {
         long now = System.currentTimeMillis();
         this.nextPauseAt = now + 3000 + random.nextInt(2000);
         this.pauseUntil = 0;
+        this.planningTicksRemaining = 12 + random.nextInt(9);
+        this.repathCooldown = 0;
+        this.digCooldown = 0;
     }
 
     public BlockPos getTarget() { return target; }
@@ -85,6 +92,13 @@ public class PathWalker extends Module {
         EntityPlayerSP player = mc.thePlayer;
         if (player == null || mc.theWorld == null || target == null) return;
 
+        if (planningTicksRemaining > 0) {
+            planningTicksRemaining--;
+            currentAction = "Thinking...";
+            releaseMovementKeys(mc);
+            return;
+        }
+
         if (Float.isNaN(currentYaw)) {
             currentYaw = player.rotationYaw;
             currentPitch = player.rotationPitch;
@@ -101,14 +115,25 @@ public class PathWalker extends Module {
             return;
         }
 
-        planPath(mc, player);
+        if (repathCooldown > 0) {
+            repathCooldown--;
+        }
+
+        if (plannedPath.isEmpty() || repathCooldown <= 0) {
+            planPath(mc, player);
+            repathCooldown = 10;
+        }
         chooseWaypoint(player);
 
         BlockPos steering = currentWaypoint != null ? currentWaypoint : target;
         applyRotation(player, steering);
 
-        boolean blockedAhead = isRayBlocked(mc, player, steering);
+        MovingObjectPosition blockHit = getBlockHit(mc, player, steering);
+        boolean blockedAhead = blockHit != null;
         boolean shouldJump = blockedAhead && canStepUp(mc, player);
+        if (blockedAhead && !shouldJump) {
+            tryDigForward(mc, player, blockHit);
+        }
 
         boolean microPause = shouldMicroPause();
         if (microPause) {
@@ -268,7 +293,19 @@ public class PathWalker extends Module {
             for (BlockPos neighbor : getNeighbors(mc, current.pos)) {
                 if (closed.contains(neighbor)) continue;
 
-                double tentativeG = current.g + current.pos.distanceSq(neighbor);
+                double moveCost = current.pos.distanceSq(neighbor) + Math.abs(neighbor.getY() - current.pos.getY()) * 1.5;
+                double turnPenalty = 0.0;
+                if (current.parent != null) {
+                    int prevDx = current.pos.getX() - current.parent.pos.getX();
+                    int prevDz = current.pos.getZ() - current.parent.pos.getZ();
+                    int newDx = neighbor.getX() - current.pos.getX();
+                    int newDz = neighbor.getZ() - current.pos.getZ();
+                    if (prevDx != newDx || prevDz != newDz) {
+                        turnPenalty = 0.35;
+                    }
+                }
+
+                double tentativeG = current.g + moveCost + turnPenalty;
                 Node node = allNodes.get(neighbor);
                 if (node == null || tentativeG < node.g) {
                     Node next = new Node(neighbor, current, tentativeG, heuristic(neighbor, goal));
@@ -323,11 +360,36 @@ public class PathWalker extends Module {
         return null;
     }
 
-    private boolean isRayBlocked(Minecraft mc, EntityPlayerSP player, BlockPos to) {
+    private MovingObjectPosition getBlockHit(Minecraft mc, EntityPlayerSP player, BlockPos to) {
         Vec3 from = new Vec3(player.posX, player.posY + player.getEyeHeight(), player.posZ);
         Vec3 targetVec = new Vec3(to.getX() + 0.5, to.getY() + 0.8, to.getZ() + 0.5);
         MovingObjectPosition hit = mc.theWorld.rayTraceBlocks(from, targetVec, false, true, false);
-        return hit != null && hit.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK && !hit.getBlockPos().equals(to);
+        if (hit != null && hit.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK && !hit.getBlockPos().equals(to)) {
+            return hit;
+        }
+        return null;
+    }
+
+    private void tryDigForward(Minecraft mc, EntityPlayerSP player, MovingObjectPosition blockHit) {
+        if (blockHit == null || blockHit.getBlockPos() == null) return;
+        if (digCooldown > 0) {
+            digCooldown--;
+            return;
+        }
+
+        BlockPos blockPos = blockHit.getBlockPos();
+        IBlockState state = mc.theWorld.getBlockState(blockPos);
+        Block block = state.getBlock();
+        if (block == Blocks.air || block == Blocks.bedrock) return;
+
+        float hardness = block.getBlockHardness(mc.theWorld, blockPos);
+        if (hardness < 0) return;
+
+        mc.playerController.onPlayerDamageBlock(blockPos, blockHit.sideHit == null ? EnumFacing.UP : blockHit.sideHit);
+        player.swingItem();
+        currentAction = "Digging obstacle";
+        digCooldown = 4;
+        repathCooldown = 0;
     }
 
     private boolean canStepUp(Minecraft mc, EntityPlayerSP player) {

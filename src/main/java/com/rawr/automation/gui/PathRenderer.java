@@ -75,8 +75,10 @@ public class PathRenderer {
                 drawBlockOutline(renderPos, 0.8f, 0.2f, 1.0f, pulse * 0.9f);
                 drawBlockFill(renderPos, 0.8f, 0.2f, 1.0f, pulse * 0.15f);
             } else {
-                float alpha = Math.max(0.2f, 1.0f - (i * 0.12f));
-                drawBlockOutline(pos.up(), 0.7f, 0.3f, 1.0f, alpha * 0.7f);
+                float alpha = Math.max(0.25f, 1.0f - (i * 0.10f));
+                BlockPos tracerPos = pos.up();
+                drawBlockOutline(tracerPos, 0.7f, 0.3f, 1.0f, alpha * 0.85f);
+                drawBlockFill(tracerPos, 0.65f, 0.2f, 1.0f, alpha * 0.18f);
             }
         }
 
