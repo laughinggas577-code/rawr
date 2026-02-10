@@ -46,6 +46,7 @@ public class PathWalker extends Module {
     private int repathCooldown;
     private int digCooldown;
     private int pathVariantSeed;
+    private int unstuckMode = 0;
 
     private double headRotationScale = 10.0;
 
@@ -144,11 +145,11 @@ public class PathWalker extends Module {
         BlockPos steering = currentWaypoint != null ? currentWaypoint : target;
         applyRotation(player, steering);
 
-        MovingObjectPosition blockHit = getBlockHit(mc, player, steering);
-        boolean blockedAhead = blockHit != null;
-        boolean shouldJump = blockedAhead && canStepUp(mc, player);
-        if (blockedAhead && !shouldJump) {
-            tryDigForward(mc, player, blockHit);
+        ObstacleInfo obstacle = scanObstacleAhead(mc, player, steering);
+        boolean blockedAhead = obstacle.hasBlock;
+        boolean shouldJump = obstacle.shouldJump;
+        if (blockedAhead && obstacle.shouldDig) {
+            tryDigForward(mc, player, obstacle.hit);
         }
 
         boolean microPause = shouldMicroPause();
@@ -250,26 +251,58 @@ public class PathWalker extends Module {
         if (moved < 0.03 && player.onGround) {
             stuckTicks++;
             totalStuckTicks++;
-            if (stuckTicks > 8) {
-                KeyBinding.setKeyBindState(mc.gameSettings.keyBindJump.getKeyCode(), true);
-                currentAction = "Unsticking (jump)";
-            }
-            if (stuckTicks > 20) {
-                KeyBinding.setKeyBindState(mc.gameSettings.keyBindLeft.getKeyCode(), true);
-                currentAction = "Unsticking (strafe)";
-            }
-            if (stuckTicks > 40) {
-                KeyBinding.setKeyBindState(mc.gameSettings.keyBindLeft.getKeyCode(), false);
-                stuckTicks = 0;
-            }
-            if (totalStuckTicks > 200) {
-                sendChat("\u00a7c[Rawr] \u00a7fPath blocked! Stopping.");
+            performUnstuckRoutine(mc);
+
+            if (totalStuckTicks > 220) {
+                sendChat("§c[Rawr] §fPath blocked! Stopping.");
                 releaseMovementKeys(mc);
                 setEnabled(false);
             }
         } else {
             stuckTicks = 0;
+            unstuckMode = 0;
             KeyBinding.setKeyBindState(mc.gameSettings.keyBindLeft.getKeyCode(), false);
+            KeyBinding.setKeyBindState(mc.gameSettings.keyBindRight.getKeyCode(), false);
+            KeyBinding.setKeyBindState(mc.gameSettings.keyBindBack.getKeyCode(), false);
+        }
+    }
+
+    private void performUnstuckRoutine(Minecraft mc) {
+        if (stuckTicks > 6) {
+            KeyBinding.setKeyBindState(mc.gameSettings.keyBindJump.getKeyCode(), true);
+            currentAction = "Unsticking (jump)";
+            repathCooldown = 0;
+        }
+
+        if (stuckTicks > 14 && unstuckMode == 0) {
+            unstuckMode = (totalStuckTicks / 14) % 3;
+        }
+
+        if (stuckTicks > 14) {
+            if (unstuckMode == 0) {
+                KeyBinding.setKeyBindState(mc.gameSettings.keyBindLeft.getKeyCode(), true);
+                KeyBinding.setKeyBindState(mc.gameSettings.keyBindRight.getKeyCode(), false);
+                KeyBinding.setKeyBindState(mc.gameSettings.keyBindBack.getKeyCode(), false);
+                currentAction = "Unsticking (strafe left)";
+            } else if (unstuckMode == 1) {
+                KeyBinding.setKeyBindState(mc.gameSettings.keyBindLeft.getKeyCode(), false);
+                KeyBinding.setKeyBindState(mc.gameSettings.keyBindRight.getKeyCode(), true);
+                KeyBinding.setKeyBindState(mc.gameSettings.keyBindBack.getKeyCode(), false);
+                currentAction = "Unsticking (strafe right)";
+            } else {
+                KeyBinding.setKeyBindState(mc.gameSettings.keyBindLeft.getKeyCode(), false);
+                KeyBinding.setKeyBindState(mc.gameSettings.keyBindRight.getKeyCode(), false);
+                KeyBinding.setKeyBindState(mc.gameSettings.keyBindBack.getKeyCode(), true);
+                currentAction = "Unsticking (backstep)";
+            }
+        }
+
+        if (stuckTicks > 30) {
+            KeyBinding.setKeyBindState(mc.gameSettings.keyBindLeft.getKeyCode(), false);
+            KeyBinding.setKeyBindState(mc.gameSettings.keyBindRight.getKeyCode(), false);
+            KeyBinding.setKeyBindState(mc.gameSettings.keyBindBack.getKeyCode(), false);
+            stuckTicks = 0;
+            repathCooldown = 0;
         }
     }
 
@@ -465,6 +498,32 @@ public class PathWalker extends Module {
         return null;
     }
 
+
+    private ObstacleInfo scanObstacleAhead(Minecraft mc, EntityPlayerSP player, BlockPos steering) {
+        MovingObjectPosition direct = getBlockHit(mc, player, steering);
+        if (direct == null) {
+            return new ObstacleInfo(null, false, false);
+        }
+
+        BlockPos hitPos = direct.getBlockPos();
+        BlockPos above = hitPos.up();
+        BlockPos twoAbove = above.up();
+
+        boolean canJump = isSolidBlock(mc, hitPos) && !isSolidBlock(mc, above) && !isSolidBlock(mc, twoAbove);
+        boolean shouldDig = !canJump;
+
+        // Predictive look 2 blocks ahead to avoid trapping in 1-wide tunnels
+        double dirX = -MathHelper.sin(player.rotationYaw * (float) Math.PI / 180.0f);
+        double dirZ = MathHelper.cos(player.rotationYaw * (float) Math.PI / 180.0f);
+        BlockPos futureFeet = new BlockPos(player.posX + dirX * 2.0, player.posY, player.posZ + dirZ * 2.0);
+        if (isSolidBlock(mc, futureFeet) && !isSolidBlock(mc, futureFeet.up())) {
+            canJump = true;
+            shouldDig = false;
+        }
+
+        return new ObstacleInfo(direct, canJump, shouldDig);
+    }
+
     private MovingObjectPosition getBlockHit(Minecraft mc, EntityPlayerSP player, BlockPos to) {
         Vec3 from = new Vec3(player.posX, player.posY + player.getEyeHeight(), player.posZ);
         Vec3 targetVec = new Vec3(to.getX() + 0.5, to.getY() + 0.8, to.getZ() + 0.5);
@@ -543,10 +602,26 @@ public class PathWalker extends Module {
         KeyBinding.setKeyBindState(mc.gameSettings.keyBindSprint.getKeyCode(), false);
         KeyBinding.setKeyBindState(mc.gameSettings.keyBindJump.getKeyCode(), false);
         KeyBinding.setKeyBindState(mc.gameSettings.keyBindLeft.getKeyCode(), false);
+        KeyBinding.setKeyBindState(mc.gameSettings.keyBindRight.getKeyCode(), false);
+        KeyBinding.setKeyBindState(mc.gameSettings.keyBindBack.getKeyCode(), false);
     }
 
     private void sendChat(String message) {
         Minecraft.getMinecraft().ingameGUI.getChatGUI().printChatMessage(new ChatComponentText(message));
+    }
+
+    private static class ObstacleInfo {
+        private final MovingObjectPosition hit;
+        private final boolean shouldJump;
+        private final boolean shouldDig;
+        private final boolean hasBlock;
+
+        private ObstacleInfo(MovingObjectPosition hit, boolean shouldJump, boolean shouldDig) {
+            this.hit = hit;
+            this.shouldJump = shouldJump;
+            this.shouldDig = shouldDig;
+            this.hasBlock = hit != null;
+        }
     }
 
     private static class Node implements Comparable<Node> {
