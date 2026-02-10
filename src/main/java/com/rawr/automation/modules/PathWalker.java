@@ -1,5 +1,6 @@
 package com.rawr.automation.modules;
 
+import com.rawr.automation.pathing.BaritoneBridge;
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
@@ -51,6 +52,9 @@ public class PathWalker extends Module {
 
     private double headRotationScale = 10.0;
 
+    private final BaritoneBridge baritoneBridge = new BaritoneBridge();
+    private boolean usingBaritone;
+
     public PathWalker() {
         super("PathWalker", "Auto-walks to specified coordinates");
     }
@@ -71,6 +75,11 @@ public class PathWalker extends Module {
         this.repathCooldown = 0;
         this.digCooldown = 0;
         this.obstacleCommitTicks = 0;
+
+        usingBaritone = baritoneBridge.startPath(x, y, z);
+        if (usingBaritone) {
+            currentAction = "Baritone routing";
+        }
     }
 
     public BlockPos getTarget() { return target; }
@@ -99,6 +108,10 @@ public class PathWalker extends Module {
     protected void onDisable() {
         Minecraft mc = Minecraft.getMinecraft();
         releaseMovementKeys(mc);
+        if (usingBaritone) {
+            baritoneBridge.cancel();
+        }
+        usingBaritone = false;
         target = null;
         plannedPath.clear();
         currentWaypoint = null;
@@ -110,6 +123,19 @@ public class PathWalker extends Module {
         Minecraft mc = Minecraft.getMinecraft();
         EntityPlayerSP player = mc.thePlayer;
         if (player == null || mc.theWorld == null || target == null) return;
+
+        if (usingBaritone) {
+            if (!baritoneBridge.isAvailable()) {
+                usingBaritone = false;
+            } else {
+                currentAction = baritoneBridge.isPathing() ? "Baritone pathing" : "Baritone arrived";
+                if (!baritoneBridge.isPathing()) {
+                    releaseMovementKeys(mc);
+                    setEnabled(false);
+                }
+                return;
+            }
+        }
 
         if (Float.isNaN(currentYaw)) {
             currentYaw = player.rotationYaw;
