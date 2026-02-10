@@ -71,19 +71,18 @@ public class PathRenderer {
             boolean isCurrent = pos.equals(currentWP);
 
             if (isCurrent) {
-                // Current waypoint: bright cyan pulsing
-                drawBlockOutline(pos, 0.0f, 1.0f, 1.0f, pulse * 0.9f);
-                drawBlockFill(pos, 0.0f, 1.0f, 1.0f, pulse * 0.15f);
+                drawBlockOutline(pos, 0.8f, 0.2f, 1.0f, pulse * 0.9f);
+                drawBlockFill(pos, 0.8f, 0.2f, 1.0f, pulse * 0.15f);
             } else {
-                // Future waypoints: green fading with distance
-                float alpha = Math.max(0.2f, 1.0f - (i * 0.12f));
-                drawBlockOutline(pos, 0.3f, 1.0f, 0.3f, alpha * 0.7f);
+                float alpha = Math.max(0.25f, 1.0f - (i * 0.10f));
+                drawBlockOutline(pos, 0.7f, 0.3f, 1.0f, alpha * 0.85f);
+                drawBlockFill(pos, 0.65f, 0.2f, 1.0f, alpha * 0.18f);
             }
         }
 
         // Draw connecting line between waypoints
         if (path.size() >= 2) {
-            drawPathLine(path, 0.3f, 1.0f, 0.5f, 0.6f);
+            drawPathLine(path, 0.7f, 0.3f, 1.0f, 0.8f);
         }
 
         // Draw line from player to first waypoint
@@ -92,7 +91,17 @@ public class PathRenderer {
             drawLine(
                     player.posX, player.posY + 0.1, player.posZ,
                     first.getX() + 0.5, first.getY() + 0.1, first.getZ() + 0.5,
-                    0.0f, 0.8f, 1.0f, 0.5f
+                    0.7f, 0.3f, 1.0f, 0.5f
+            );
+        }
+
+
+        // Always draw a direct guidance line to target immediately (even before path points are populated)
+        if (target != null) {
+            drawLine(
+                    player.posX, player.posY + 0.1, player.posZ,
+                    target.getX() + 0.5, target.getY() + 0.1, target.getZ() + 0.5,
+                    0.8f, 0.2f, 1.0f, 0.35f
             );
         }
 
