@@ -47,6 +47,7 @@ public class PathWalker extends Module {
     private int digCooldown;
     private int pathVariantSeed;
     private int unstuckMode = 0;
+    private int obstacleCommitTicks = 0;
 
     private double headRotationScale = 10.0;
 
@@ -66,9 +67,10 @@ public class PathWalker extends Module {
         long now = System.currentTimeMillis();
         this.nextPauseAt = now + 3000 + random.nextInt(2000);
         this.pauseUntil = 0;
-        this.planningTicksRemaining = 60;
+        this.planningTicksRemaining = 0;
         this.repathCooldown = 0;
         this.digCooldown = 0;
+        this.obstacleCommitTicks = 0;
     }
 
     public BlockPos getTarget() { return target; }
@@ -109,13 +111,6 @@ public class PathWalker extends Module {
         EntityPlayerSP player = mc.thePlayer;
         if (player == null || mc.theWorld == null || target == null) return;
 
-        if (planningTicksRemaining > 0) {
-            planningTicksRemaining--;
-            currentAction = "Thinking...";
-            releaseMovementKeys(mc);
-            return;
-        }
-
         if (Float.isNaN(currentYaw)) {
             currentYaw = player.rotationYaw;
             currentPitch = player.rotationPitch;
@@ -148,11 +143,19 @@ public class PathWalker extends Module {
         ObstacleInfo obstacle = scanObstacleAhead(mc, player, steering);
         boolean blockedAhead = obstacle.hasBlock;
         boolean shouldJump = obstacle.shouldJump;
-        if (blockedAhead && obstacle.shouldDig) {
-            tryDigForward(mc, player, obstacle.hit);
+
+        if (blockedAhead) {
+            if (obstacle.shouldDig) {
+                tryDigForward(mc, player, obstacle.hit);
+            }
+            if (obstacleCommitTicks < 4) {
+                obstacleCommitTicks++;
+            }
+        } else {
+            obstacleCommitTicks = 0;
         }
 
-        boolean microPause = shouldMicroPause();
+        boolean microPause = shouldMicroPause() && !blockedAhead && stuckTicks < 4;
         if (microPause) {
             releaseMovementKeys(mc);
             currentAction = "Micro pause";
@@ -264,14 +267,22 @@ public class PathWalker extends Module {
             KeyBinding.setKeyBindState(mc.gameSettings.keyBindLeft.getKeyCode(), false);
             KeyBinding.setKeyBindState(mc.gameSettings.keyBindRight.getKeyCode(), false);
             KeyBinding.setKeyBindState(mc.gameSettings.keyBindBack.getKeyCode(), false);
+            KeyBinding.setKeyBindState(mc.gameSettings.keyBindJump.getKeyCode(), false);
         }
     }
 
     private void performUnstuckRoutine(Minecraft mc) {
-        if (stuckTicks > 6) {
+        if (stuckTicks > 4) {
             KeyBinding.setKeyBindState(mc.gameSettings.keyBindJump.getKeyCode(), true);
             currentAction = "Unsticking (jump)";
             repathCooldown = 0;
+
+            if (mc.thePlayer != null) {
+                MovingObjectPosition hit = getBlockHit(mc, mc.thePlayer, currentWaypoint != null ? currentWaypoint : target);
+                if (hit != null) {
+                    tryDigForward(mc, mc.thePlayer, hit);
+                }
+            }
         }
 
         if (stuckTicks > 14 && unstuckMode == 0) {
@@ -501,27 +512,60 @@ public class PathWalker extends Module {
 
     private ObstacleInfo scanObstacleAhead(Minecraft mc, EntityPlayerSP player, BlockPos steering) {
         MovingObjectPosition direct = getBlockHit(mc, player, steering);
-        if (direct == null) {
+        if (direct == null || direct.getBlockPos() == null) {
             return new ObstacleInfo(null, false, false);
         }
 
         BlockPos hitPos = direct.getBlockPos();
-        BlockPos above = hitPos.up();
-        BlockPos twoAbove = above.up();
+        BlockPos top = hitPos.up();
+        BlockPos twoAbove = top.up();
+        BlockPos landing = hitPos.up();
 
-        boolean canJump = isSolidBlock(mc, hitPos) && !isSolidBlock(mc, above) && !isSolidBlock(mc, twoAbove);
-        boolean shouldDig = !canJump;
+        boolean climbable = isSolidBlock(mc, hitPos) && !isSolidBlock(mc, top) && !isSolidBlock(mc, twoAbove);
+        boolean landingSafe = isSafeLanding(mc, landing);
 
-        // Predictive look 2 blocks ahead to avoid trapping in 1-wide tunnels
         double dirX = -MathHelper.sin(player.rotationYaw * (float) Math.PI / 180.0f);
         double dirZ = MathHelper.cos(player.rotationYaw * (float) Math.PI / 180.0f);
-        BlockPos futureFeet = new BlockPos(player.posX + dirX * 2.0, player.posY, player.posZ + dirZ * 2.0);
-        if (isSolidBlock(mc, futureFeet) && !isSolidBlock(mc, futureFeet.up())) {
-            canJump = true;
-            shouldDig = false;
+
+        BlockPos front1 = new BlockPos(player.posX + dirX * 1.1, player.posY, player.posZ + dirZ * 1.1);
+        BlockPos front2 = new BlockPos(player.posX + dirX * 2.1, player.posY, player.posZ + dirZ * 2.1);
+        boolean front1Solid = isSolidBlock(mc, front1);
+        boolean front2Solid = isSolidBlock(mc, front2);
+
+        boolean canJumpNow = climbable && landingSafe;
+        if (front1Solid && front2Solid && canJumpNow) {
+            // stacked obstacle ahead; prefer dig to avoid getting clipped on second block
+            canJumpNow = false;
         }
 
-        return new ObstacleInfo(direct, canJump, shouldDig);
+        Block block = mc.theWorld.getBlockState(hitPos).getBlock();
+        float hardness = block.getBlockHardness(mc.theWorld, hitPos);
+        boolean breakable = block != Blocks.bedrock && block != Blocks.obsidian && hardness >= 0;
+
+        boolean shouldDig = !canJumpNow && breakable;
+        if (!shouldDig && !canJumpNow && !breakable) {
+            // unbreakable wall; force jump attempts if physically possible
+            canJumpNow = climbable;
+        }
+
+        return new ObstacleInfo(direct, canJumpNow, shouldDig);
+    }
+
+    private boolean isSafeLanding(Minecraft mc, BlockPos landingFeet) {
+        BlockPos below = landingFeet.down();
+        BlockPos feet = landingFeet;
+        BlockPos head = landingFeet.up();
+
+        if (!isSolidBlock(mc, below)) {
+            return false;
+        }
+        if (isSolidBlock(mc, feet) || isSolidBlock(mc, head)) {
+            return false;
+        }
+
+        // avoid stepping onto dangerous blocks when deciding jump-vs-dig
+        Block ground = mc.theWorld.getBlockState(below).getBlock();
+        return ground != Blocks.lava && ground != Blocks.flowing_lava && ground != Blocks.fire && ground != Blocks.cactus;
     }
 
     private MovingObjectPosition getBlockHit(Minecraft mc, EntityPlayerSP player, BlockPos to) {
@@ -552,8 +596,9 @@ public class PathWalker extends Module {
         mc.playerController.onPlayerDamageBlock(blockPos, blockHit.sideHit == null ? EnumFacing.UP : blockHit.sideHit);
         player.swingItem();
         currentAction = "Digging obstacle";
-        digCooldown = 4;
+        digCooldown = 2;
         repathCooldown = 0;
+        obstacleCommitTicks = 4;
     }
 
     private boolean canStepUp(Minecraft mc, EntityPlayerSP player) {
