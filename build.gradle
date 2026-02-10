@@ -32,7 +32,6 @@ minecraft {
 
 jar {
     manifest {
-        attributes 'FMLCorePlugin': 'com.rawr.automation.RawrAutomation'
     }
 }
 
