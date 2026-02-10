@@ -16,7 +16,7 @@ public class AutomationKeybindHandler {
     private final ModuleManager moduleManager;
     private final ModConfig config;
 
-    private final KeyBinding openGuiKey = new KeyBinding("key.rawr.open_gui", Keyboard.KEY_R, KEY_CATEGORY);
+    private final KeyBinding openGuiKey = new KeyBinding("key.rawr.open_gui", Keyboard.KEY_L, KEY_CATEGORY);
     private final KeyBinding stopAllKey = new KeyBinding("key.rawr.stop_all", Keyboard.KEY_NONE, KEY_CATEGORY);
 
     public AutomationKeybindHandler(ModuleManager moduleManager, ModConfig config) {
