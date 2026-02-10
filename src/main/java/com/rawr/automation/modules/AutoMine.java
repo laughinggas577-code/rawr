@@ -77,7 +77,7 @@ public class AutoMine extends Module {
             if (dist > 4.5) {
                 PathWalker walker = ModuleManager.getInstance() != null ? (PathWalker) ModuleManager.getInstance().getModule("pathwalker") : null;
                 if (walker != null) {
-                    walker.setTarget(target.getX(), target.getY() + 1, target.getZ());
+                    walker.setTarget(target.getX(), target.getY(), target.getZ());
                     if (!walker.isEnabled()) {
                         walker.setEnabled(true);
                     }

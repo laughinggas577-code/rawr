@@ -22,16 +22,19 @@ public class PathWalkerTargetGuiScreen extends GuiScreen {
     private static final int MAX_HISTORY = 8;
     private static final String HISTORY_KEY = "PathWalkerHistory";
     private static final String ROTATION_SCALE_KEY = "PathWalkerHeadRotationScale";
+    private static final String WAYPOINTS_KEY = "PathWalkerWaypoints";
 
     private final AutomationGuiScreen parentScreen;
     private final PathWalker pathWalker;
     private final ModConfig config;
 
     private final List<CoordEntry> historyEntries = new ArrayList<CoordEntry>();
+    private final List<WaypointEntry> waypoints = new ArrayList<WaypointEntry>();
 
     private GuiTextField xField;
     private GuiTextField yField;
     private GuiTextField zField;
+    private GuiTextField waypointNameField;
     private String errorMessage = "";
     private double rotationScale = 10.0;
 
@@ -46,6 +49,7 @@ public class PathWalkerTargetGuiScreen extends GuiScreen {
         this.buttonList.clear();
 
         loadHistory();
+        loadWaypoints();
         rotationScale = config.getInt(ROTATION_SCALE_KEY, 20) / 2.0;
         pathWalker.setHeadRotationScale(rotationScale);
 
@@ -74,6 +78,15 @@ public class PathWalkerTargetGuiScreen extends GuiScreen {
 
         this.buttonList.add(new GuiButton(ROTATION_MINUS_ID, centerX + 110, startY, 20, 20, "-"));
         this.buttonList.add(new GuiButton(ROTATION_PLUS_ID, centerX + 190, startY, 20, 20, "+"));
+
+        waypointNameField = new GuiTextField(40, this.fontRendererObj, centerX + 110, startY + 30, 100, 20);
+        waypointNameField.setMaxStringLength(16);
+        this.buttonList.add(new GuiButton(400, centerX + 110, startY + 52, 100, 20, "Save Waypoint"));
+
+        int wpY = startY + 78;
+        for (int i = 0; i < waypoints.size() && i < 5; i++) {
+            this.buttonList.add(new GuiButton(450 + i, centerX + 110, wpY + (i * 22), 100, 20, waypoints.get(i).name));
+        }
     }
 
     @Override
@@ -110,6 +123,26 @@ public class PathWalkerTargetGuiScreen extends GuiScreen {
 
         if (button.id == ROTATION_PLUS_ID) {
             setRotationScale(rotationScale + 0.5);
+            return;
+        }
+
+        if (button.id == 400) {
+            Integer x = parseInt(xField.getText());
+            Integer y = parseInt(yField.getText());
+            Integer z = parseInt(zField.getText());
+            if (x != null && y != null && z != null) {
+                saveWaypoint(waypointNameField.getText(), x, y, z);
+                initGui();
+            }
+            return;
+        }
+
+        if (button.id >= 450 && button.id < 455) {
+            int idx = button.id - 450;
+            if (idx < waypoints.size()) {
+                WaypointEntry wp = waypoints.get(idx);
+                runPath(wp.x, wp.y, wp.z);
+            }
         }
     }
 
@@ -117,7 +150,8 @@ public class PathWalkerTargetGuiScreen extends GuiScreen {
     protected void keyTyped(char typedChar, int keyCode) throws IOException {
         if (xField.textboxKeyTyped(typedChar, keyCode)
                 || yField.textboxKeyTyped(typedChar, keyCode)
-                || zField.textboxKeyTyped(typedChar, keyCode)) {
+                || zField.textboxKeyTyped(typedChar, keyCode)
+                || (waypointNameField != null && waypointNameField.textboxKeyTyped(typedChar, keyCode))) {
             return;
         }
 
@@ -135,6 +169,7 @@ public class PathWalkerTargetGuiScreen extends GuiScreen {
         xField.mouseClicked(mouseX, mouseY, mouseButton);
         yField.mouseClicked(mouseX, mouseY, mouseButton);
         zField.mouseClicked(mouseX, mouseY, mouseButton);
+        if (waypointNameField != null) waypointNameField.mouseClicked(mouseX, mouseY, mouseButton);
     }
 
     @Override
@@ -148,11 +183,13 @@ public class PathWalkerTargetGuiScreen extends GuiScreen {
         drawString(this.fontRendererObj, "Z", this.width / 2 + 32, this.height / 2 - 27, 0xFFFFFF);
         drawString(this.fontRendererObj, EnumChatFormatting.LIGHT_PURPLE + "History", this.width / 2 - 210, this.height / 2 - 45, 0xFFFFFF);
         drawString(this.fontRendererObj, "Head Rot", this.width / 2 + 135, this.height / 2 - 45, 0xFFFFFF);
+        drawString(this.fontRendererObj, EnumChatFormatting.LIGHT_PURPLE + "Waypoints", this.width / 2 + 132, this.height / 2 + 20, 0xFFFFFF);
         drawString(this.fontRendererObj, EnumChatFormatting.AQUA + String.format("%.1f", rotationScale), this.width / 2 + 157, this.height / 2 - 27, 0xFFFFFF);
 
         xField.drawTextBox();
         yField.drawTextBox();
         zField.drawTextBox();
+        if (waypointNameField != null) waypointNameField.drawTextBox();
 
         if (!errorMessage.isEmpty()) {
             drawCenteredString(this.fontRendererObj, errorMessage, this.width / 2, this.height / 2 + 58, 0xFFFFFF);
@@ -220,6 +257,46 @@ public class PathWalkerTargetGuiScreen extends GuiScreen {
         }
     }
 
+
+    private void loadWaypoints() {
+        waypoints.clear();
+        String raw = config.getString(WAYPOINTS_KEY, "");
+        if (raw == null || raw.trim().isEmpty()) return;
+
+        String[] entries = raw.split(";");
+        for (String entry : entries) {
+            String[] parts = entry.split("\\|");
+            if (parts.length != 4) continue;
+            try {
+                waypoints.add(new WaypointEntry(parts[0], Integer.parseInt(parts[1]), Integer.parseInt(parts[2]), Integer.parseInt(parts[3])));
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private void saveWaypoint(String name, int x, int y, int z) {
+        if (name == null || name.trim().isEmpty()) {
+            name = "WP " + (waypoints.size() + 1);
+        }
+
+        List<WaypointEntry> updated = new ArrayList<WaypointEntry>();
+        updated.add(new WaypointEntry(name.trim(), x, y, z));
+        for (WaypointEntry wp : waypoints) {
+            if (updated.size() >= 5) break;
+            updated.add(wp);
+        }
+        waypoints.clear();
+        waypoints.addAll(updated);
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < waypoints.size(); i++) {
+            WaypointEntry wp = waypoints.get(i);
+            if (i > 0) sb.append(';');
+            sb.append(wp.name).append('|').append(wp.x).append('|').append(wp.y).append('|').append(wp.z);
+        }
+        config.setString(WAYPOINTS_KEY, sb.toString());
+        config.save();
+    }
+
     private void addHistory(int x, int y, int z) {
         List<CoordEntry> newHistory = new ArrayList<CoordEntry>();
         newHistory.add(new CoordEntry(x, y, z));
@@ -244,6 +321,20 @@ public class PathWalkerTargetGuiScreen extends GuiScreen {
             sb.append(e.x).append(',').append(e.y).append(',').append(e.z);
         }
         config.setString(HISTORY_KEY, sb.toString());
+    }
+
+    private static class WaypointEntry {
+        private final String name;
+        private final int x;
+        private final int y;
+        private final int z;
+
+        private WaypointEntry(String name, int x, int y, int z) {
+            this.name = name;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
     }
 
     private static class CoordEntry {

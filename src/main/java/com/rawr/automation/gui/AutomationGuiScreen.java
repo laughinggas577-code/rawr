@@ -17,7 +17,7 @@ import java.util.List;
 public class AutomationGuiScreen extends GuiScreen {
 
     private static final int STOP_ALL_ID = 5000;
-    private static final int AUTO_MINE_TARGET_ID = 5001;
+    private static final int AUTO_MINE_MENU_ID = 5001;
 
     private final ModuleManager moduleManager;
     private final ModConfig config;
@@ -46,7 +46,7 @@ public class AutomationGuiScreen extends GuiScreen {
             orderedModules.add(module);
             buttonList.add(new GuiButton(id++, x, y, 200, 20, getModuleButtonText(module)));
             if (module instanceof AutoMine) {
-                buttonList.add(new GuiButton(AUTO_MINE_TARGET_ID, x + 206, y, 120, 20, "Target: " + autoMine.getTargetBlock()));
+                buttonList.add(new GuiButton(AUTO_MINE_MENU_ID, x + 206, y, 120, 20, "Block Menu"));
             }
             y += 24;
         }
@@ -57,13 +57,10 @@ public class AutomationGuiScreen extends GuiScreen {
 
     @Override
     protected void actionPerformed(GuiButton button) throws IOException {
-        if (button.id == AUTO_MINE_TARGET_ID) {
+        if (button.id == AUTO_MINE_MENU_ID) {
             AutoMine autoMine = (AutoMine) moduleManager.getModule("automine");
             if (autoMine != null) {
-                autoMine.cycleTargetBlock();
-                config.setString("AutoMine.TargetBlock", autoMine.getTargetBlock());
-                config.save();
-                button.displayString = "Target: " + autoMine.getTargetBlock();
+                Minecraft.getMinecraft().displayGuiScreen(new OreSelectorGuiScreen(this, autoMine, config));
             }
             return;
         }
@@ -92,8 +89,12 @@ public class AutomationGuiScreen extends GuiScreen {
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         drawDefaultBackground();
-        drawCenteredString(this.fontRendererObj, EnumChatFormatting.GOLD + "Rawr Automation", this.width / 2, this.height / 2 - 102, 0xFFFFFF);
-        drawCenteredString(this.fontRendererObj, "Toggle modules", this.width / 2, this.height / 2 - 90, 0xC0C0C0);
+        int left = this.width / 2 - 130;
+        int top = this.height / 2 - 110;
+        drawRect(left, top, left + 360, top + 260, 0xC0101010);
+        drawRect(left, top, left + 360, top + 20, 0xC0202020);
+        drawCenteredString(this.fontRendererObj, EnumChatFormatting.GOLD + "Rawr Automation", this.width / 2, top + 6, 0xFFFFFF);
+        drawCenteredString(this.fontRendererObj, EnumChatFormatting.GRAY + "Modules / Tools", this.width / 2, top + 24, 0xC0C0C0);
         super.drawScreen(mouseX, mouseY, partialTicks);
     }
 

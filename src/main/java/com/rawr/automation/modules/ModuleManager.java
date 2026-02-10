@@ -21,6 +21,7 @@ public class ModuleManager {
         registerModule(new AutoAttack());
         registerModule(new PathWalker());
         registerModule(new MobESP());
+        registerModule(new XRay());
     }
 
     private void registerModule(Module module) {

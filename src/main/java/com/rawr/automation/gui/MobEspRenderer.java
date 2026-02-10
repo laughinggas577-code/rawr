@@ -10,6 +10,7 @@ import net.minecraft.client.renderer.WorldRenderer;
 import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.client.renderer.entity.RenderManager;
 import net.minecraft.entity.monster.IMob;
 import net.minecraftforge.client.event.RenderWorldLastEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
@@ -54,6 +55,7 @@ public class MobEspRenderer {
             float g = hostile ? 0.2f : 1.0f;
             float b = 0.7f;
             drawBox(e, r, g, b, 0.7f);
+            drawNameTag(e, hostile ? "Hostile" : "Mob");
         }
 
         GlStateManager.enableDepth();
@@ -91,6 +93,24 @@ public class MobEspRenderer {
         line(wr, x1,y0,z1, x1,y1,z1, r,g,b,a);
         line(wr, x0,y0,z1, x0,y1,z1, r,g,b,a);
         tess.draw();
+    }
+
+
+    private void drawNameTag(Entity e, String type) {
+        Minecraft mc = Minecraft.getMinecraft();
+        RenderManager rm = mc.getRenderManager();
+        String name = e.getName() + " [" + type + "]";
+
+        GlStateManager.pushMatrix();
+        GlStateManager.translate(e.posX, e.posY + e.height + 0.6, e.posZ);
+        GlStateManager.rotate(-rm.playerViewY, 0.0F, 1.0F, 0.0F);
+        GlStateManager.rotate(rm.playerViewX, 1.0F, 0.0F, 0.0F);
+        GlStateManager.scale(-0.025F, -0.025F, 0.025F);
+
+        int width = mc.fontRendererObj.getStringWidth(name) / 2;
+        drawRect(-width - 2, -2, width + 2, 9, 0x90000000);
+        mc.fontRendererObj.drawString(name, -width, 0, 0xFFFFFF);
+        GlStateManager.popMatrix();
     }
 
     private void line(WorldRenderer wr, double x1, double y1, double z1, double x2, double y2, double z2, float r, float g, float b, float a) {
