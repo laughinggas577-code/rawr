@@ -4,8 +4,10 @@ import com.rawr.automation.modules.Module;
 import com.rawr.automation.modules.ModuleManager;
 import com.rawr.automation.modules.PathWalker;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.ScaledResolution;
+import net.minecraft.util.BlockPos;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
@@ -66,14 +68,43 @@ public class HudRenderer {
 
             String label = "\u00a7a\u25B6 \u00a7f" + module.getName();
 
-            // Add extra info for PathWalker
+            // PathWalker gets expanded info with distance, action, waypoints
             if (module instanceof PathWalker) {
                 PathWalker walker = (PathWalker) module;
-                if (walker.getTarget() != null) {
-                    label += " \u00a77-> " + walker.getTarget().getX()
-                            + ", " + walker.getTarget().getY()
-                            + ", " + walker.getTarget().getZ();
+                BlockPos target = walker.getTarget();
+                if (target != null) {
+                    label += " \u00a77-> \u00a7e" + target.getX()
+                            + ", " + target.getY()
+                            + ", " + target.getZ();
                 }
+
+                int labelWidth = font.getStringWidth(label);
+                font.drawStringWithShadow(label, x - labelWidth, y, 0xFFFFFF);
+                y += lineHeight;
+
+                if (target != null) {
+                    EntityPlayerSP player = mc.thePlayer;
+                    double ddx = target.getX() + 0.5 - player.posX;
+                    double ddz = target.getZ() + 0.5 - player.posZ;
+                    double dist = Math.sqrt(ddx * ddx + ddz * ddz);
+
+                    String distStr = String.format("\u00a77  Dist: \u00a7f%.1f blocks", dist);
+                    int dw = font.getStringWidth(distStr);
+                    font.drawStringWithShadow(distStr, x - dw, y, 0xFFFFFF);
+                    y += lineHeight;
+
+                    String actionStr = "\u00a77  Action: \u00a7b" + walker.getCurrentAction();
+                    int aw = font.getStringWidth(actionStr);
+                    font.drawStringWithShadow(actionStr, x - aw, y, 0xFFFFFF);
+                    y += lineHeight;
+
+                    int wpCount = walker.getPlannedPath().size();
+                    String wpStr = "\u00a77  Waypoints: \u00a7f" + wpCount;
+                    int ww = font.getStringWidth(wpStr);
+                    font.drawStringWithShadow(wpStr, x - ww, y, 0xFFFFFF);
+                    y += lineHeight;
+                }
+                continue;
             }
 
             int labelWidth = font.getStringWidth(label);

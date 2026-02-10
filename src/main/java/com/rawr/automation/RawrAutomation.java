@@ -3,6 +3,7 @@ package com.rawr.automation;
 import com.rawr.automation.command.AutomationCommandHandler;
 import com.rawr.automation.config.ModConfig;
 import com.rawr.automation.gui.HudRenderer;
+import com.rawr.automation.gui.PathRenderer;
 import com.rawr.automation.modules.ModuleManager;
 import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.common.MinecraftForge;
@@ -36,6 +37,7 @@ public class RawrAutomation {
 
         MinecraftForge.EVENT_BUS.register(moduleManager);
         MinecraftForge.EVENT_BUS.register(new HudRenderer(moduleManager));
+        MinecraftForge.EVENT_BUS.register(new PathRenderer(moduleManager));
 
         ClientCommandHandler.instance.registerCommand(new AutomationCommandHandler(moduleManager, config));
     }
