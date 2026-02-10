@@ -95,6 +95,16 @@ public class PathRenderer {
             );
         }
 
+
+        // Always draw a direct guidance line to target immediately (even before path points are populated)
+        if (target != null) {
+            drawLine(
+                    player.posX, player.posY + 0.1, player.posZ,
+                    target.getX() + 0.5, target.getY() + 0.1, target.getZ() + 0.5,
+                    0.8f, 0.2f, 1.0f, 0.35f
+            );
+        }
+
         // Draw target destination marker
         if (target != null) {
             drawBlockOutline(target, 1.0f, 0.3f, 0.1f, pulse * 0.9f);
