@@ -54,6 +54,8 @@ public class PathWalker extends Module {
 
     private final BaritoneBridge baritoneBridge = new BaritoneBridge();
     private boolean usingBaritone;
+    private int baritoneNoPathTicks;
+    private int baritoneRetryCooldown;
 
     public PathWalker() {
         super("PathWalker", "Auto-walks to specified coordinates");
@@ -75,8 +77,10 @@ public class PathWalker extends Module {
         this.repathCooldown = 0;
         this.digCooldown = 0;
         this.obstacleCommitTicks = 0;
+        this.baritoneNoPathTicks = 0;
+        this.baritoneRetryCooldown = 0;
 
-        usingBaritone = baritoneBridge.startPath(x, y, z);
+        usingBaritone = startBaritonePrimaryPath();
         if (usingBaritone) {
             currentAction = "Baritone routing";
         } else {
@@ -117,6 +121,8 @@ public class PathWalker extends Module {
             baritoneBridge.cancel();
         }
         usingBaritone = false;
+        baritoneNoPathTicks = 0;
+        baritoneRetryCooldown = 0;
         target = null;
         plannedPath.clear();
         currentWaypoint = null;
@@ -129,14 +135,37 @@ public class PathWalker extends Module {
         EntityPlayerSP player = mc.thePlayer;
         if (player == null || mc.theWorld == null || target == null) return;
 
+        if (!usingBaritone && baritoneBridge.isAvailable()) {
+            usingBaritone = startBaritonePrimaryPath();
+        }
+
         if (usingBaritone) {
             if (!baritoneBridge.isAvailable()) {
                 usingBaritone = false;
             } else {
-                currentAction = baritoneBridge.isPathing() ? "Baritone pathing" : "Baritone arrived";
-                if (!baritoneBridge.isPathing()) {
+                boolean pathing = baritoneBridge.isPathing();
+                if (pathing) {
+                    baritoneNoPathTicks = 0;
+                    currentAction = "Baritone pathing";
+                } else {
+                    baritoneNoPathTicks++;
+                    currentAction = "Baritone computing";
+                    if (baritoneRetryCooldown > 0) {
+                        baritoneRetryCooldown--;
+                    }
+                    if (baritoneNoPathTicks > 10 && baritoneRetryCooldown <= 0) {
+                        startBaritonePrimaryPath();
+                        baritoneRetryCooldown = 10;
+                    }
+                }
+
+                double toTargetSq = player.getDistanceSq(target.getX() + 0.5, target.getY(), target.getZ() + 0.5);
+                if (toTargetSq <= (ARRIVAL_DISTANCE * ARRIVAL_DISTANCE) && !pathing) {
+                    currentAction = "Baritone arrived";
                     releaseMovementKeys(mc);
                     setEnabled(false);
+                } else {
+                    releaseMovementKeys(mc);
                 }
                 return;
             }
@@ -199,6 +228,19 @@ public class PathWalker extends Module {
         lastX = player.posX;
         lastY = player.posY;
         lastZ = player.posZ;
+    }
+
+    private boolean startBaritonePrimaryPath() {
+        if (target == null || !baritoneBridge.isAvailable()) {
+            return false;
+        }
+
+        boolean started = baritoneBridge.startPath(target.getX(), target.getY(), target.getZ());
+        if (started) {
+            baritoneNoPathTicks = 0;
+            baritoneRetryCooldown = 0;
+        }
+        return started;
     }
 
     private void chooseWaypoint(EntityPlayerSP player) {
