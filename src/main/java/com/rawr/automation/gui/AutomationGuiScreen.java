@@ -3,6 +3,8 @@ package com.rawr.automation.gui;
 import com.rawr.automation.config.ModConfig;
 import com.rawr.automation.modules.Module;
 import com.rawr.automation.modules.ModuleManager;
+import com.rawr.automation.modules.PathWalker;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.util.EnumChatFormatting;
@@ -54,6 +56,12 @@ public class AutomationGuiScreen extends GuiScreen {
 
         if (button.id >= 0 && button.id < orderedModules.size()) {
             Module module = orderedModules.get(button.id);
+
+            if (module instanceof PathWalker && !module.isEnabled()) {
+                Minecraft.getMinecraft().displayGuiScreen(new PathWalkerTargetGuiScreen(this, (PathWalker) module, config));
+                return;
+            }
+
             module.toggle();
             moduleManager.saveSettings(config);
             button.displayString = getModuleButtonText(module);
