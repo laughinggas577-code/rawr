@@ -33,7 +33,7 @@ public class PathWalkerTargetGuiScreen extends GuiScreen {
     private GuiTextField yField;
     private GuiTextField zField;
     private String errorMessage = "";
-    private double rotationScale = 5.0;
+    private double rotationScale = 10.0;
 
     public PathWalkerTargetGuiScreen(AutomationGuiScreen parentScreen, PathWalker pathWalker, ModConfig config) {
         this.parentScreen = parentScreen;
@@ -46,7 +46,7 @@ public class PathWalkerTargetGuiScreen extends GuiScreen {
         this.buttonList.clear();
 
         loadHistory();
-        rotationScale = config.getInt(ROTATION_SCALE_KEY, 10) / 2.0;
+        rotationScale = config.getInt(ROTATION_SCALE_KEY, 20) / 2.0;
         pathWalker.setHeadRotationScale(rotationScale);
 
         int centerX = this.width / 2;
@@ -180,7 +180,7 @@ public class PathWalkerTargetGuiScreen extends GuiScreen {
 
     private void setRotationScale(double value) {
         if (value < 1.0) value = 1.0;
-        if (value > 10.0) value = 10.0;
+        if (value > 20.0) value = 20.0;
         rotationScale = Math.round(value * 2.0) / 2.0;
         pathWalker.setHeadRotationScale(rotationScale);
     }

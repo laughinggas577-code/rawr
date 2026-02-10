@@ -45,8 +45,9 @@ public class PathWalker extends Module {
     private int planningTicksRemaining;
     private int repathCooldown;
     private int digCooldown;
+    private int pathVariantSeed;
 
-    private double headRotationScale = 5.0;
+    private double headRotationScale = 10.0;
 
     public PathWalker() {
         super("PathWalker", "Auto-walks to specified coordinates");
@@ -64,7 +65,7 @@ public class PathWalker extends Module {
         long now = System.currentTimeMillis();
         this.nextPauseAt = now + 3000 + random.nextInt(2000);
         this.pauseUntil = 0;
-        this.planningTicksRemaining = 12 + random.nextInt(9);
+        this.planningTicksRemaining = 60;
         this.repathCooldown = 0;
         this.digCooldown = 0;
     }
@@ -87,7 +88,7 @@ public class PathWalker extends Module {
 
     public void setHeadRotationScale(double scale) {
         if (scale < 1.0) scale = 1.0;
-        if (scale > 10.0) scale = 10.0;
+        if (scale > 20.0) scale = 20.0;
         this.headRotationScale = Math.round(scale * 2.0) / 2.0;
     }
 
@@ -279,11 +280,24 @@ public class PathWalker extends Module {
         BlockPos goal = findClosestWalkable(mc, target);
         if (start == null || goal == null) return;
 
-        List<BlockPos> path = findPathAStar(mc, start, goal);
-        if (path.isEmpty()) return;
+        List<BlockPos> best = Collections.emptyList();
+        double bestCost = Double.MAX_VALUE;
 
-        for (int i = 1; i < path.size() && i < MAX_PATH_STEPS; i++) {
-            plannedPath.add(path.get(i));
+        for (int variant = 0; variant < 3; variant++) {
+            pathVariantSeed = variant;
+            List<BlockPos> candidate = findPathAStar(mc, start, goal);
+            if (candidate.isEmpty()) continue;
+            double cost = estimatePathCost(candidate);
+            if (cost < bestCost) {
+                bestCost = cost;
+                best = candidate;
+            }
+        }
+
+        if (best.isEmpty()) return;
+
+        for (int i = 1; i < best.size() && i < MAX_PATH_STEPS; i++) {
+            plannedPath.add(best.get(i));
         }
     }
 
@@ -308,7 +322,12 @@ public class PathWalker extends Module {
                 continue;
             }
 
-            for (BlockPos neighbor : getNeighbors(mc, current.pos)) {
+            List<BlockPos> neighbors = getNeighbors(mc, current.pos);
+            if (pathVariantSeed > 0) {
+                Collections.shuffle(neighbors, new Random((long) current.pos.hashCode() + pathVariantSeed * 31L));
+            }
+
+            for (BlockPos neighbor : neighbors) {
                 if (closed.contains(neighbor)) continue;
 
                 double moveCost = current.pos.distanceSq(neighbor) + Math.abs(neighbor.getY() - current.pos.getY()) * 1.5;
@@ -334,6 +353,19 @@ public class PathWalker extends Module {
         }
 
         return Collections.emptyList();
+    }
+
+
+    private double estimatePathCost(List<BlockPos> path) {
+        if (path.isEmpty()) return Double.MAX_VALUE;
+        double cost = 0.0;
+        for (int i = 1; i < path.size(); i++) {
+            BlockPos a = path.get(i - 1);
+            BlockPos b = path.get(i);
+            cost += a.distanceSq(b);
+            cost += Math.abs(a.getY() - b.getY()) * 1.2;
+        }
+        return cost;
     }
 
     private List<BlockPos> reconstruct(Node end) {
@@ -433,9 +465,9 @@ public class PathWalker extends Module {
     }
 
     private float getScaledRotationStep() {
-        // 1.0 = snappy, 10.0 = very smooth
-        double t = (headRotationScale - 1.0) / 9.0;
-        return (float) (32.0 - (t * 27.0));
+        // 1.0 = snappy, 20.0 = very smooth
+        double t = (headRotationScale - 1.0) / 19.0;
+        return (float) (34.0 - (t * 30.0));
     }
 
     private float smoothAngleEaseInOut(float current, float target, float maxStep) {

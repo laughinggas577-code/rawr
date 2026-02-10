@@ -3,6 +3,7 @@ package com.rawr.automation.gui;
 import com.rawr.automation.config.ModConfig;
 import com.rawr.automation.modules.Module;
 import com.rawr.automation.modules.ModuleManager;
+import com.rawr.automation.modules.AutoMine;
 import com.rawr.automation.modules.PathWalker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiButton;
@@ -16,6 +17,7 @@ import java.util.List;
 public class AutomationGuiScreen extends GuiScreen {
 
     private static final int STOP_ALL_ID = 5000;
+    private static final int AUTO_MINE_TARGET_ID = 5001;
 
     private final ModuleManager moduleManager;
     private final ModConfig config;
@@ -35,9 +37,17 @@ public class AutomationGuiScreen extends GuiScreen {
         int y = this.height / 2 - 80;
         int id = 0;
 
+        AutoMine autoMine = (AutoMine) moduleManager.getModule("automine");
+        if (autoMine != null) {
+            autoMine.setTargetBlock(config.getString("AutoMine.TargetBlock", autoMine.getTargetBlock()));
+        }
+
         for (Module module : moduleManager.getModules().values()) {
             orderedModules.add(module);
             buttonList.add(new GuiButton(id++, x, y, 200, 20, getModuleButtonText(module)));
+            if (module instanceof AutoMine) {
+                buttonList.add(new GuiButton(AUTO_MINE_TARGET_ID, x + 206, y, 120, 20, "Target: " + autoMine.getTargetBlock()));
+            }
             y += 24;
         }
 
@@ -47,6 +57,17 @@ public class AutomationGuiScreen extends GuiScreen {
 
     @Override
     protected void actionPerformed(GuiButton button) throws IOException {
+        if (button.id == AUTO_MINE_TARGET_ID) {
+            AutoMine autoMine = (AutoMine) moduleManager.getModule("automine");
+            if (autoMine != null) {
+                autoMine.cycleTargetBlock();
+                config.setString("AutoMine.TargetBlock", autoMine.getTargetBlock());
+                config.save();
+                button.displayString = "Target: " + autoMine.getTargetBlock();
+            }
+            return;
+        }
+
         if (button.id == STOP_ALL_ID) {
             moduleManager.disableAllModules();
             moduleManager.saveSettings(config);
