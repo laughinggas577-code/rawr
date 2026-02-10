@@ -33,7 +33,7 @@ public class PathRenderer {
     @SubscribeEvent
     public void onRenderWorldLast(RenderWorldLastEvent event) {
         PathWalker walker = (PathWalker) moduleManager.getModule("pathwalker");
-        if (walker == null || !walker.isEnabled() || !walker.isMovementActive()) return;
+        if (walker == null || !walker.isEnabled()) return;
 
         Minecraft mc = Minecraft.getMinecraft();
         EntityPlayerSP player = mc.thePlayer;
@@ -71,14 +71,12 @@ public class PathRenderer {
             boolean isCurrent = pos.equals(currentWP);
 
             if (isCurrent) {
-                BlockPos renderPos = pos.up();
-                drawBlockOutline(renderPos, 0.8f, 0.2f, 1.0f, pulse * 0.9f);
-                drawBlockFill(renderPos, 0.8f, 0.2f, 1.0f, pulse * 0.15f);
+                drawBlockOutline(pos, 0.8f, 0.2f, 1.0f, pulse * 0.9f);
+                drawBlockFill(pos, 0.8f, 0.2f, 1.0f, pulse * 0.15f);
             } else {
                 float alpha = Math.max(0.25f, 1.0f - (i * 0.10f));
-                BlockPos tracerPos = pos.up();
-                drawBlockOutline(tracerPos, 0.7f, 0.3f, 1.0f, alpha * 0.85f);
-                drawBlockFill(tracerPos, 0.65f, 0.2f, 1.0f, alpha * 0.18f);
+                drawBlockOutline(pos, 0.7f, 0.3f, 1.0f, alpha * 0.85f);
+                drawBlockFill(pos, 0.65f, 0.2f, 1.0f, alpha * 0.18f);
             }
         }
 
@@ -92,19 +90,19 @@ public class PathRenderer {
             BlockPos first = path.get(0);
             drawLine(
                     player.posX, player.posY + 0.1, player.posZ,
-                    first.getX() + 0.5, first.getY() + 1.1, first.getZ() + 0.5,
+                    first.getX() + 0.5, first.getY() + 0.1, first.getZ() + 0.5,
                     0.7f, 0.3f, 1.0f, 0.5f
             );
         }
 
         // Draw target destination marker
         if (target != null) {
-            drawBlockOutline(target.up(), 1.0f, 0.3f, 0.1f, pulse * 0.9f);
-            drawBlockFill(target.up(), 1.0f, 0.4f, 0.1f, pulse * 0.2f);
+            drawBlockOutline(target, 1.0f, 0.3f, 0.1f, pulse * 0.9f);
+            drawBlockFill(target, 1.0f, 0.4f, 0.1f, pulse * 0.2f);
             // Vertical beacon line above target
             drawLine(
-                    target.getX() + 0.5, target.getY() + 1, target.getZ() + 0.5,
-                    target.getX() + 0.5, target.getY() + 7, target.getZ() + 0.5,
+                    target.getX() + 0.5, target.getY(), target.getZ() + 0.5,
+                    target.getX() + 0.5, target.getY() + 6, target.getZ() + 0.5,
                     1.0f, 0.5f, 0.1f, pulse * 0.4f
             );
         }
@@ -228,7 +226,7 @@ public class PathRenderer {
 
         wr.begin(GL11.GL_LINE_STRIP, DefaultVertexFormats.POSITION_COLOR);
         for (BlockPos pos : path) {
-            wr.pos(pos.getX() + 0.5, pos.getY() + 1.1, pos.getZ() + 0.5)
+            wr.pos(pos.getX() + 0.5, pos.getY() + 0.1, pos.getZ() + 0.5)
               .color(r, g, b, a).endVertex();
         }
         tess.draw();

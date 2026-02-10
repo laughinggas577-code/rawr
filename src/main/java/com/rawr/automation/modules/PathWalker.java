@@ -79,6 +79,11 @@ public class PathWalker extends Module {
         usingBaritone = baritoneBridge.startPath(x, y, z);
         if (usingBaritone) {
             currentAction = "Baritone routing";
+        } else {
+            Minecraft mc = Minecraft.getMinecraft();
+            if (mc.thePlayer != null && mc.theWorld != null) {
+                planPath(mc, mc.thePlayer);
+            }
         }
     }
 
