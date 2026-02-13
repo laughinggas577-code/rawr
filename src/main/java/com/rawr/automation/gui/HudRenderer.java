@@ -49,14 +49,14 @@ public class HudRenderer {
         int y = 4;
         int lineHeight = font.FONT_HEIGHT + 2;
 
-        // Title
-        String title = "\u00a76Rawr Auto";
+        // Title (purple themed)
+        String title = "\u00a7dRawr Auto";
         int titleWidth = font.getStringWidth(title);
         font.drawStringWithShadow(title, x - titleWidth, y, 0xFFFFFF);
         y += lineHeight + 2;
 
-        // Draw separator line
-        String sep = "\u00a78---------";
+        // Draw separator line (purple)
+        String sep = "\u00a75---------";
         int sepWidth = font.getStringWidth(sep);
         font.drawStringWithShadow(sep, x - sepWidth, y, 0xFFFFFF);
         y += lineHeight;
@@ -66,14 +66,14 @@ public class HudRenderer {
             Module module = entry.getValue();
             if (!module.isEnabled()) continue;
 
-            String label = "\u00a7a\u25B6 \u00a7f" + module.getName();
+            String label = "\u00a7d\u25B6 \u00a7f" + module.getName();
 
             // PathWalker gets expanded info with distance, action, waypoints
             if (module instanceof PathWalker) {
                 PathWalker walker = (PathWalker) module;
                 BlockPos target = walker.getTarget();
                 if (target != null) {
-                    label += " \u00a77-> \u00a7e" + target.getX()
+                    label += " \u00a77-> \u00a7d" + target.getX()
                             + ", " + target.getY()
                             + ", " + target.getZ();
                 }
@@ -93,7 +93,7 @@ public class HudRenderer {
                     font.drawStringWithShadow(distStr, x - dw, y, 0xFFFFFF);
                     y += lineHeight;
 
-                    String actionStr = "\u00a77  Action: \u00a7b" + walker.getCurrentAction();
+                    String actionStr = "\u00a77  Action: \u00a7d" + walker.getCurrentAction();
                     int aw = font.getStringWidth(actionStr);
                     font.drawStringWithShadow(actionStr, x - aw, y, 0xFFFFFF);
                     y += lineHeight;
