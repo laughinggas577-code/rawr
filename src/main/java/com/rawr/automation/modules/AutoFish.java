@@ -6,6 +6,8 @@ import net.minecraft.entity.projectile.EntityFishHook;
 import net.minecraft.item.ItemFishingRod;
 import net.minecraft.item.ItemStack;
 
+import java.lang.reflect.Method;
+
 /**
  * AutoFish - Automatically reels in fish and recasts the rod.
  * Detects when the bobber dips (fish bite) and reels in, then recasts.
@@ -132,8 +134,27 @@ public class AutoFish extends Module {
         tickDelay = 20;
     }
 
+    private static Method rightClickMethod = null;
+
     private void rightClick(Minecraft mc) {
-        // Simulate right click
-        mc.rightClickMouse();
+        // rightClickMouse() is private - access via reflection
+        // Try MCP name, then SRG name, then obfuscated name
+        if (rightClickMethod == null) {
+            String[] names = {"rightClickMouse", "func_147121_ag", "ag"};
+            for (String name : names) {
+                try {
+                    rightClickMethod = Minecraft.class.getDeclaredMethod(name);
+                    rightClickMethod.setAccessible(true);
+                    break;
+                } catch (NoSuchMethodException ignored) {
+                }
+            }
+        }
+        if (rightClickMethod != null) {
+            try {
+                rightClickMethod.invoke(mc);
+            } catch (Exception ignored) {
+            }
+        }
     }
 }

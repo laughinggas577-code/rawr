@@ -2,6 +2,7 @@ package com.rawr.automation.modules;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.item.ItemFood;
 import net.minecraft.item.ItemStack;
 
@@ -44,7 +45,7 @@ public class AutoEat extends Module {
                 return;
             }
             // Keep using item
-            mc.gameSettings.keyBindUseItem.pressed = true;
+            KeyBinding.setKeyBindState(mc.gameSettings.keyBindUseItem.getKeyCode(), true);
             return;
         }
 
@@ -61,14 +62,14 @@ public class AutoEat extends Module {
         // Switch to food slot and start eating
         previousSlot = player.inventory.currentItem;
         player.inventory.currentItem = foodSlot;
-        mc.gameSettings.keyBindUseItem.pressed = true;
+        KeyBinding.setKeyBindState(mc.gameSettings.keyBindUseItem.getKeyCode(), true);
         isEating = true;
         eatTickCounter = 0;
     }
 
     private void stopEating() {
         Minecraft mc = Minecraft.getMinecraft();
-        mc.gameSettings.keyBindUseItem.pressed = false;
+        KeyBinding.setKeyBindState(mc.gameSettings.keyBindUseItem.getKeyCode(), false);
         if (previousSlot != -1 && mc.thePlayer != null) {
             mc.thePlayer.inventory.currentItem = previousSlot;
         }

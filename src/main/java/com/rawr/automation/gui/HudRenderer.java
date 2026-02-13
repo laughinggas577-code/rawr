@@ -99,7 +99,11 @@ public class HudRenderer {
                     y += lineHeight;
 
                     int wpCount = walker.getPlannedPath().size();
-                    String wpStr = "\u00a77  Waypoints: \u00a7f" + wpCount;
+                    int wpIdx = walker.getPathIndex();
+                    String wpStr = "\u00a77  Waypoints: \u00a7f" + wpIdx + "/" + wpCount;
+                    if (!walker.isPathComplete()) {
+                        wpStr += " \u00a7e(partial)";
+                    }
                     int ww = font.getStringWidth(wpStr);
                     font.drawStringWithShadow(wpStr, x - ww, y, 0xFFFFFF);
                     y += lineHeight;
