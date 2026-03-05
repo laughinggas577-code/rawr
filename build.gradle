@@ -1,51 +1,22 @@
-buildscript {
-    repositories {
-        mavenCentral()
-        maven {
-            name = "forge"
-            url = "https://maven.minecraftforge.net/"
-        }
-        maven {
-            name = "sonatype"
-            url = "https://oss.sonatype.org/content/repositories/snapshots/"
-        }
-    }
-    dependencies {
-        classpath 'net.minecraftforge.gradle:ForgeGradle:2.1-SNAPSHOT'
-    }
+plugins {
+    id 'net.neoforged.gradle.userdev' version '7.0.145'
 }
 
-apply plugin: 'net.minecraftforge.gradle.forge'
+version = '2.0.0'
+group = 'com.rawr.automation'
 
-version = "1.0.0"
-group = "com.rawr.automation"
-archivesBaseName = "RawrAutomation"
-
-sourceCompatibility = JavaVersion.VERSION_1_8
-targetCompatibility = JavaVersion.VERSION_1_8
-
-minecraft {
-    version = "1.8.9-11.15.1.2318-1.8.9"
-    runDir = "run"
-    mappings = "stable_22"
+base {
+    archivesName = 'RawrAutomation'
 }
 
-jar {
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+runs {
+    client {
+        modSource project.sourceSets.main
+    }
 }
 
 dependencies {
-}
-
-processResources {
-    inputs.property "version", project.version
-    inputs.property "mcversion", project.minecraft.version
-
-    from(sourceSets.main.resources.srcDirs) {
-        include 'mcmod.info'
-        expand 'version': project.version, 'mcversion': project.minecraft.version
-    }
-
-    from(sourceSets.main.resources.srcDirs) {
-        exclude 'mcmod.info'
-    }
+    implementation 'net.neoforged:neoforge:21.1.77'
 }

@@ -1,17 +1,17 @@
 package com.rawr.automation.modules;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.entity.EntityPlayerSP;
-import net.minecraft.client.multiplayer.PlayerControllerMP;
-import net.minecraft.util.BlockPos;
-import net.minecraft.util.EnumFacing;
-import net.minecraft.util.MovingObjectPosition;
+import net.minecraft.client.multiplayer.MultiPlayerGameMode;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 
 /**
  * AutoMine - Automatically mines the block the player is looking at.
- * Continuously holds the attack button to break blocks without holding click.
  */
 public class AutoMine extends Module {
 
@@ -23,11 +23,11 @@ public class AutoMine extends Module {
 
     @Override
     protected void onDisable() {
-        Minecraft mc = Minecraft.getMinecraft();
-        if (mc.thePlayer != null && wasBreaking) {
-            PlayerControllerMP controller = mc.playerController;
-            if (controller != null) {
-                controller.resetBlockRemoving();
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null && wasBreaking) {
+            MultiPlayerGameMode gameMode = mc.gameMode;
+            if (gameMode != null) {
+                gameMode.stopDestroyBlock();
             }
             wasBreaking = false;
         }
@@ -35,37 +35,35 @@ public class AutoMine extends Module {
 
     @Override
     public void onTick() {
-        Minecraft mc = Minecraft.getMinecraft();
-        EntityPlayerSP player = mc.thePlayer;
-        if (player == null || mc.theWorld == null || mc.currentScreen != null) return;
+        Minecraft mc = Minecraft.getInstance();
+        LocalPlayer player = mc.player;
+        if (player == null || mc.level == null || mc.screen != null) return;
 
-        MovingObjectPosition mop = mc.objectMouseOver;
-        if (mop == null || mop.typeOfHit != MovingObjectPosition.MovingObjectType.BLOCK) {
+        HitResult hitResult = mc.hitResult;
+        if (hitResult == null || hitResult.getType() != HitResult.Type.BLOCK) {
             if (wasBreaking) {
-                mc.playerController.resetBlockRemoving();
+                mc.gameMode.stopDestroyBlock();
                 wasBreaking = false;
             }
             return;
         }
 
-        BlockPos pos = mop.getBlockPos();
-        EnumFacing face = mop.sideHit;
-        IBlockState state = mc.theWorld.getBlockState(pos);
-        Block block = state.getBlock();
+        BlockHitResult blockHit = (BlockHitResult) hitResult;
+        BlockPos pos = blockHit.getBlockPos();
+        Direction face = blockHit.getDirection();
+        BlockState state = mc.level.getBlockState(pos);
 
-        if (block.getMaterial().isLiquid()) {
+        if (state.liquid()) {
             return;
         }
 
-        // Simulate holding left click to break
-        if (mc.playerController.onPlayerDamageBlock(pos, face)) {
-            mc.thePlayer.swingItem();
+        if (mc.gameMode.continueDestroyBlock(pos, face)) {
+            player.swing(InteractionHand.MAIN_HAND);
             wasBreaking = true;
         }
 
-        // Start breaking if not already
         if (!wasBreaking) {
-            mc.playerController.clickBlock(pos, face);
+            mc.gameMode.startDestroyBlock(pos, face);
             wasBreaking = true;
         }
     }

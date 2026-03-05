@@ -1,25 +1,29 @@
 package com.rawr.automation.modules;
 
-import net.minecraft.block.*;
-import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.entity.EntityPlayerSP;
-import net.minecraft.init.Blocks;
-import net.minecraft.init.Items;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.BlockPos;
-import net.minecraft.util.EnumFacing;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.CropBlock;
+import net.minecraft.world.level.block.NetherWartBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * AutoFarm - Automatically harvests fully grown crops within reach and replants them.
- * Supports wheat, carrots, potatoes, nether wart, and melon/pumpkin stems.
  */
 public class AutoFarm extends Module {
 
     private static final int RANGE = 4;
     private int tickCounter = 0;
-    private static final int TICK_INTERVAL = 4; // Check every 4 ticks
+    private static final int TICK_INTERVAL = 4;
 
     public AutoFarm() {
         super("AutoFarm", "Auto-harvests and replants crops within reach");
@@ -27,86 +31,83 @@ public class AutoFarm extends Module {
 
     @Override
     public void onTick() {
-        Minecraft mc = Minecraft.getMinecraft();
-        EntityPlayerSP player = mc.thePlayer;
-        if (player == null || mc.theWorld == null || mc.currentScreen != null) return;
+        Minecraft mc = Minecraft.getInstance();
+        LocalPlayer player = mc.player;
+        if (player == null || mc.level == null || mc.screen != null) return;
 
         tickCounter++;
         if (tickCounter < TICK_INTERVAL) return;
         tickCounter = 0;
 
-        BlockPos playerPos = new BlockPos(player.posX, player.posY, player.posZ);
+        BlockPos playerPos = player.blockPosition();
 
         for (int x = -RANGE; x <= RANGE; x++) {
             for (int y = -2; y <= 2; y++) {
                 for (int z = -RANGE; z <= RANGE; z++) {
-                    BlockPos pos = playerPos.add(x, y, z);
+                    BlockPos pos = playerPos.offset(x, y, z);
                     tryHarvest(mc, player, pos);
                 }
             }
         }
     }
 
-    private void tryHarvest(Minecraft mc, EntityPlayerSP player, BlockPos pos) {
-        IBlockState state = mc.theWorld.getBlockState(pos);
+    private void tryHarvest(Minecraft mc, LocalPlayer player, BlockPos pos) {
+        BlockState state = mc.level.getBlockState(pos);
         Block block = state.getBlock();
 
-        if (block instanceof BlockCrops) {
-            // Wheat, carrots, potatoes - metadata 7 = fully grown
-            int meta = block.getMetaFromState(state);
-            if (meta >= 7) {
+        if (block instanceof CropBlock) {
+            if (((CropBlock) block).isMaxAge(state)) {
                 breakAndReplant(mc, player, pos, block);
             }
-        } else if (block == Blocks.nether_wart) {
-            int age = state.getValue(BlockNetherWart.AGE);
+        } else if (block == Blocks.NETHER_WART) {
+            int age = state.getValue(NetherWartBlock.AGE);
             if (age >= 3) {
                 breakAndReplant(mc, player, pos, block);
             }
-        } else if (block == Blocks.melon_block || block == Blocks.pumpkin) {
-            // Just break melons/pumpkins, no replant needed (stems regrow)
-            mc.playerController.onPlayerDamageBlock(pos, EnumFacing.UP);
-            player.swingItem();
+        } else if (block == Blocks.MELON || block == Blocks.PUMPKIN) {
+            mc.gameMode.continueDestroyBlock(pos, Direction.UP);
+            player.swing(InteractionHand.MAIN_HAND);
         }
     }
 
-    private void breakAndReplant(Minecraft mc, EntityPlayerSP player, BlockPos pos, Block block) {
-        // Break the crop
-        mc.playerController.onPlayerDamageBlock(pos, EnumFacing.UP);
-        player.swingItem();
+    private void breakAndReplant(Minecraft mc, LocalPlayer player, BlockPos pos, Block block) {
+        mc.gameMode.continueDestroyBlock(pos, Direction.UP);
+        player.swing(InteractionHand.MAIN_HAND);
 
-        // Find seed in hotbar for replanting
         int seedSlot = findSeedSlot(player, block);
         if (seedSlot != -1) {
-            int prevSlot = player.inventory.currentItem;
-            player.inventory.currentItem = seedSlot;
-            mc.playerController.onPlayerRightClick(
-                    player, mc.theWorld, player.getHeldItem(), pos, EnumFacing.UP,
-                    player.getLookVec()
+            int prevSlot = player.getInventory().selected;
+            player.getInventory().selected = seedSlot;
+
+            BlockHitResult hitResult = new BlockHitResult(
+                    Vec3.atCenterOf(pos), Direction.UP, pos, false
             );
-            player.inventory.currentItem = prevSlot;
+            mc.gameMode.useItemOn(player, InteractionHand.MAIN_HAND, hitResult);
+
+            player.getInventory().selected = prevSlot;
         }
     }
 
-    private int findSeedSlot(EntityPlayerSP player, Block block) {
+    private int findSeedSlot(LocalPlayer player, Block block) {
         Item seedItem = null;
 
-        if (block instanceof BlockCrops) {
-            if (block == Blocks.wheat) {
-                seedItem = Items.wheat_seeds;
-            } else if (block == Blocks.carrots) {
-                seedItem = Items.carrot;
-            } else if (block == Blocks.potatoes) {
-                seedItem = Items.potato;
+        if (block instanceof CropBlock) {
+            if (block == Blocks.WHEAT) {
+                seedItem = Items.WHEAT_SEEDS;
+            } else if (block == Blocks.CARROTS) {
+                seedItem = Items.CARROT;
+            } else if (block == Blocks.POTATOES) {
+                seedItem = Items.POTATO;
             }
-        } else if (block == Blocks.nether_wart) {
-            seedItem = Items.nether_wart;
+        } else if (block == Blocks.NETHER_WART) {
+            seedItem = Items.NETHER_WART;
         }
 
         if (seedItem == null) return -1;
 
         for (int i = 0; i < 9; i++) {
-            ItemStack stack = player.inventory.getStackInSlot(i);
-            if (stack != null && stack.getItem() == seedItem) {
+            ItemStack stack = player.getInventory().getItem(i);
+            if (!stack.isEmpty() && stack.getItem() == seedItem) {
                 return i;
             }
         }

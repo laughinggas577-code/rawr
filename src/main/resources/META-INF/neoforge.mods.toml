@@ -1,0 +1,23 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+
+[[mods]]
+modId = "rawrautomation"
+version = "${version}"
+displayName = "Rawr Automation"
+description = '''A singleplayer automation tool for Minecraft 1.21.1. Includes AutoMine, AutoEat, AutoFish, AutoFarm, AutoAttack, and PathWalker with ultra-smooth A* pathfinding and purple path visualization.'''
+
+[[dependencies.rawrautomation]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.rawrautomation]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1,1.22)"
+ordering = "NONE"
+side = "CLIENT"

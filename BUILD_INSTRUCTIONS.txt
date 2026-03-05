@@ -3,33 +3,32 @@
 ========================================
 
 REQUIREMENTS:
-  - Java 8 (JDK 1.8) - MUST be Java 8, newer versions won't work
-  - Internet connection (to download Forge dependencies)
+  - Java 21 (JDK 21)
+  - Internet connection (to download NeoForge dependencies)
 
-QUICK BUILD (3 steps):
-  1. Extract this source zip to a folder
-  2. Open a terminal in that folder
-  3. Run:
-       Windows:  gradlew.bat setupDecompWorkspace && gradlew.bat build
-       Linux:    ./gradlew setupDecompWorkspace && ./gradlew build
+QUICK BUILD (2 steps):
+  1. Open a terminal in the project folder
+  2. Run:
+       Windows:  gradlew.bat build
+       Linux:    ./gradlew build
 
-  The built mod jar will be at: build/libs/RawrAutomation-1.0.0.jar
+  The built mod jar will be at: build/libs/RawrAutomation-2.0.0.jar
 
 INSTALL:
-  1. Install Minecraft Forge 1.8.9 (11.15.1.2318)
-  2. Copy RawrAutomation-1.0.0.jar to your .minecraft/mods/ folder
-  3. Launch Minecraft with the Forge 1.8.9 profile
+  1. Install NeoForge for Minecraft 1.21.1
+  2. Copy RawrAutomation-2.0.0.jar to your .minecraft/mods/ folder
+  3. Launch Minecraft with the NeoForge 1.21.1 profile
 
 IN-GAME USAGE:
-  /rawr              - Show help and all modules
-  /rawr list         - List modules and status
-  /rawr automine     - Toggle AutoMine
-  /rawr autoeat      - Toggle AutoEat
-  /rawr autofish     - Toggle AutoFish (hold a fishing rod)
-  /rawr autofarm     - Toggle AutoFarm
-  /rawr autoattack   - Toggle AutoAttack
-  /rawr walkto X Y Z - Auto-walk to coordinates
-  /rawr attack animals - Toggle animal targeting
+  /rawr                    - Show help and all modules
+  /rawr list               - List modules and status
+  /rawr toggle automine    - Toggle AutoMine
+  /rawr toggle autoeat     - Toggle AutoEat
+  /rawr toggle autofish    - Toggle AutoFish (hold a fishing rod)
+  /rawr toggle autofarm    - Toggle AutoFarm
+  /rawr toggle autoattack  - Toggle AutoAttack
+  /rawr walkto X Y Z       - Auto-walk to coordinates
+  /rawr attack animals     - Toggle animal targeting
 
 MODULES:
   AutoMine   - Mines blocks you look at automatically

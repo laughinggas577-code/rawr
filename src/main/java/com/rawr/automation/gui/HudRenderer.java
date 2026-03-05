@@ -4,12 +4,12 @@ import com.rawr.automation.modules.Module;
 import com.rawr.automation.modules.ModuleManager;
 import com.rawr.automation.modules.PathWalker;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.entity.EntityPlayerSP;
-import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.ScaledResolution;
-import net.minecraft.util.BlockPos;
-import net.minecraftforge.client.event.RenderGameOverlayEvent;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.BlockPos;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.client.event.RenderGuiEvent;
 
 import java.util.Map;
 
@@ -26,13 +26,10 @@ public class HudRenderer {
     }
 
     @SubscribeEvent
-    public void onRenderOverlay(RenderGameOverlayEvent.Post event) {
-        if (event.type != RenderGameOverlayEvent.ElementType.ALL) return;
+    public void onRenderGui(RenderGuiEvent.Post event) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.getDebugOverlay().showDebugScreen()) return;
 
-        Minecraft mc = Minecraft.getMinecraft();
-        if (mc.thePlayer == null || mc.gameSettings.showDebugInfo) return;
-
-        // Check if any module is active
         boolean anyActive = false;
         for (Module module : moduleManager.getModules().values()) {
             if (module.isEnabled()) {
@@ -42,23 +39,23 @@ public class HudRenderer {
         }
         if (!anyActive) return;
 
-        FontRenderer font = mc.fontRendererObj;
-        ScaledResolution res = new ScaledResolution(mc);
+        GuiGraphics guiGraphics = event.getGuiGraphics();
+        Font font = mc.font;
 
-        int x = res.getScaledWidth() - 4;
+        int x = mc.getWindow().getGuiScaledWidth() - 4;
         int y = 4;
-        int lineHeight = font.FONT_HEIGHT + 2;
+        int lineHeight = font.lineHeight + 2;
 
         // Title (purple themed)
         String title = "\u00a7dRawr Auto";
-        int titleWidth = font.getStringWidth(title);
-        font.drawStringWithShadow(title, x - titleWidth, y, 0xFFFFFF);
+        int titleWidth = font.width(title);
+        guiGraphics.drawString(font, title, x - titleWidth, y, 0xFFFFFF);
         y += lineHeight + 2;
 
         // Draw separator line (purple)
         String sep = "\u00a75---------";
-        int sepWidth = font.getStringWidth(sep);
-        font.drawStringWithShadow(sep, x - sepWidth, y, 0xFFFFFF);
+        int sepWidth = font.width(sep);
+        guiGraphics.drawString(font, sep, x - sepWidth, y, 0xFFFFFF);
         y += lineHeight;
 
         // List active modules
@@ -68,7 +65,6 @@ public class HudRenderer {
 
             String label = "\u00a7d\u25B6 \u00a7f" + module.getName();
 
-            // PathWalker gets expanded info with distance, action, waypoints
             if (module instanceof PathWalker) {
                 PathWalker walker = (PathWalker) module;
                 BlockPos target = walker.getTarget();
@@ -78,24 +74,24 @@ public class HudRenderer {
                             + ", " + target.getZ();
                 }
 
-                int labelWidth = font.getStringWidth(label);
-                font.drawStringWithShadow(label, x - labelWidth, y, 0xFFFFFF);
+                int labelWidth = font.width(label);
+                guiGraphics.drawString(font, label, x - labelWidth, y, 0xFFFFFF);
                 y += lineHeight;
 
                 if (target != null) {
-                    EntityPlayerSP player = mc.thePlayer;
-                    double ddx = target.getX() + 0.5 - player.posX;
-                    double ddz = target.getZ() + 0.5 - player.posZ;
+                    LocalPlayer player = mc.player;
+                    double ddx = target.getX() + 0.5 - player.getX();
+                    double ddz = target.getZ() + 0.5 - player.getZ();
                     double dist = Math.sqrt(ddx * ddx + ddz * ddz);
 
                     String distStr = String.format("\u00a77  Dist: \u00a7f%.1f blocks", dist);
-                    int dw = font.getStringWidth(distStr);
-                    font.drawStringWithShadow(distStr, x - dw, y, 0xFFFFFF);
+                    int dw = font.width(distStr);
+                    guiGraphics.drawString(font, distStr, x - dw, y, 0xFFFFFF);
                     y += lineHeight;
 
                     String actionStr = "\u00a77  Action: \u00a7d" + walker.getCurrentAction();
-                    int aw = font.getStringWidth(actionStr);
-                    font.drawStringWithShadow(actionStr, x - aw, y, 0xFFFFFF);
+                    int aw = font.width(actionStr);
+                    guiGraphics.drawString(font, actionStr, x - aw, y, 0xFFFFFF);
                     y += lineHeight;
 
                     int wpCount = walker.getPlannedPath().size();
@@ -104,15 +100,15 @@ public class HudRenderer {
                     if (!walker.isPathComplete()) {
                         wpStr += " \u00a7e(partial)";
                     }
-                    int ww = font.getStringWidth(wpStr);
-                    font.drawStringWithShadow(wpStr, x - ww, y, 0xFFFFFF);
+                    int ww = font.width(wpStr);
+                    guiGraphics.drawString(font, wpStr, x - ww, y, 0xFFFFFF);
                     y += lineHeight;
                 }
                 continue;
             }
 
-            int labelWidth = font.getStringWidth(label);
-            font.drawStringWithShadow(label, x - labelWidth, y, 0xFFFFFF);
+            int labelWidth = font.width(label);
+            guiGraphics.drawString(font, label, x - labelWidth, y, 0xFFFFFF);
             y += lineHeight;
         }
     }

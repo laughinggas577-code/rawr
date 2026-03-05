@@ -1,16 +1,15 @@
 package com.rawr.automation.modules;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.entity.EntityPlayerSP;
-import net.minecraft.entity.projectile.EntityFishHook;
-import net.minecraft.item.ItemFishingRod;
-import net.minecraft.item.ItemStack;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.entity.projectile.FishingHook;
+import net.minecraft.world.item.FishingRodItem;
+import net.minecraft.world.item.ItemStack;
 
 import java.lang.reflect.Method;
 
 /**
  * AutoFish - Automatically reels in fish and recasts the rod.
- * Detects when the bobber dips (fish bite) and reels in, then recasts.
  */
 public class AutoFish extends Module {
 
@@ -44,13 +43,12 @@ public class AutoFish extends Module {
 
     @Override
     public void onTick() {
-        Minecraft mc = Minecraft.getMinecraft();
-        EntityPlayerSP player = mc.thePlayer;
-        if (player == null || mc.theWorld == null || mc.currentScreen != null) return;
+        Minecraft mc = Minecraft.getInstance();
+        LocalPlayer player = mc.player;
+        if (player == null || mc.level == null || mc.screen != null) return;
 
-        // Check if holding a fishing rod
-        ItemStack held = player.getHeldItem();
-        if (held == null || !(held.getItem() instanceof ItemFishingRod)) {
+        ItemStack held = player.getMainHandItem();
+        if (held.isEmpty() || !(held.getItem() instanceof FishingRodItem)) {
             state = State.IDLE;
             return;
         }
@@ -76,57 +74,50 @@ public class AutoFish extends Module {
         }
     }
 
-    private void handleIdle(Minecraft mc, EntityPlayerSP player) {
-        EntityFishHook hook = player.fishEntity;
+    private void handleIdle(Minecraft mc, LocalPlayer player) {
+        FishingHook hook = player.fishing;
         if (hook != null) {
-            // Already cast, start waiting
             state = State.WAITING_FOR_BITE;
-            lastBobberY = hook.posY;
+            lastBobberY = hook.getY();
             stableTicks = 0;
         } else {
-            // Cast the rod
             rightClick(mc);
-            tickDelay = 20; // Wait 1 second for cast
+            tickDelay = 20;
             state = State.WAITING_FOR_BITE;
         }
     }
 
-    private void handleWaiting(Minecraft mc, EntityPlayerSP player) {
-        EntityFishHook hook = player.fishEntity;
+    private void handleWaiting(Minecraft mc, LocalPlayer player) {
+        FishingHook hook = player.fishing;
         if (hook == null) {
             state = State.IDLE;
             return;
         }
 
-        // Wait for bobber to settle
         if (stableTicks < 10) {
-            lastBobberY = hook.posY;
+            lastBobberY = hook.getY();
             stableTicks++;
             return;
         }
 
-        // Detect a bite: the bobber drops quickly (Y decreases)
-        double currentY = hook.posY;
+        double currentY = hook.getY();
         double yDelta = lastBobberY - currentY;
 
         if (yDelta > 0.05) {
-            // Fish bite detected!
             state = State.REELING_IN;
-            tickDelay = 2; // Small delay to be natural
+            tickDelay = 2;
         }
 
         lastBobberY = currentY;
     }
 
-    private void handleReeling(Minecraft mc, EntityPlayerSP player) {
-        // Reel in the fish
+    private void handleReeling(Minecraft mc, LocalPlayer player) {
         rightClick(mc);
         state = State.RECASTING;
-        tickDelay = 15; // Wait before recasting
+        tickDelay = 15;
     }
 
-    private void handleRecasting(Minecraft mc, EntityPlayerSP player) {
-        // Cast again
+    private void handleRecasting(Minecraft mc, LocalPlayer player) {
         rightClick(mc);
         state = State.WAITING_FOR_BITE;
         lastBobberY = 0;
@@ -137,10 +128,9 @@ public class AutoFish extends Module {
     private static Method rightClickMethod = null;
 
     private void rightClick(Minecraft mc) {
-        // rightClickMouse() is private - access via reflection
-        // Try MCP name, then SRG name, then obfuscated name
+        // startUseItem() is private - access via reflection (Mojang mappings name)
         if (rightClickMethod == null) {
-            String[] names = {"rightClickMouse", "func_147121_ag", "ag"};
+            String[] names = {"startUseItem", "rightClickMouse"};
             for (String name : names) {
                 try {
                     rightClickMethod = Minecraft.class.getDeclaredMethod(name);

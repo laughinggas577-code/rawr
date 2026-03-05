@@ -1,8 +1,8 @@
 package com.rawr.automation.modules;
 
 import com.rawr.automation.config.ModConfig;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import net.minecraftforge.fml.common.gameevent.TickEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.event.tick.ClientTickEvent;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -49,9 +49,7 @@ public class ModuleManager {
     }
 
     @SubscribeEvent
-    public void onClientTick(TickEvent.ClientTickEvent event) {
-        if (event.phase != TickEvent.Phase.END) return;
-
+    public void onClientTick(ClientTickEvent.Post event) {
         for (Module module : modules.values()) {
             if (module.isEnabled()) {
                 try {
